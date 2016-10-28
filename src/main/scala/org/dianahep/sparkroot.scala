@@ -21,119 +21,135 @@ package object sparkroot {
     def root(path: String) = reader.format("org.dianahep.sparkroot").load(path)
   }
 
-  def rootTreesInFile(
+  def rootTreesInFile(reader: RootFileReader) =
+    // TODO: search subdirectories for TTrees
+    (0 until reader.nKeys).
+      filter(i => reader.getKey(i).getObjectClass.getClassName == "TTree").
+      map(i => reader.getKey(i).getObject.asInstanceOf[hep.io.root.interfaces.TTree])
 
+  class RootBranchIterator(branch: TBranch) extends Iterator[Array[Float]] {
+    // TODO: specialize this with [T : TypeTag] and get typeSize from the type
+    // this implementation is for T =:= Float
 
-  def rootTreeIterator(rootTree: TTree, requiredColumns: Array[String], filters: Array[Filter]): Iterator[Row] = {
-    println(s"""path: $path\nrequiredColumns: ${requiredColumns.mkString(" ")}\nfilters: ${filters.mkString(" ")}""")
+    private val leaf = branch.getLeaves.get(0)
+    private val startingEntries = branch.getBasketEntry
+    private val typeSize = 4  // Float
 
+    private var basket = 0
+    private var entry = 0L
 
+    private def lastInBranch = entry == startingEntries[basket + 1] - 1
 
+    // this can be specialized in subclasses
+    private def makeOutput(size: Int) = Array.fill[Float](size)(0.0f)
 
+    // as can this
+    private def readOne(rootInput: RootInput) = rootInput.readFloat
 
+    def hasNext = basket == startingEntries.size - 1
 
+    def next() = {
+      val endPosition =
+        if (lastInBranch) {
+          // the endPosition comes from a byte marker in the ROOT header
+          val rootInput = branch.setPosition(leaf, entry)
+          basket += 1   // this is the last entry in the basket, better update the basket number
+          rootInput.getLast
+        }
+        else {
+          // the endPosition is where the next entry starts (in this basket)
+          val rootInput = branch.setPosition(leaf, entry + 1)
+          rootInput.getPosition
+        }
 
-
-
+      // actually get the data
+      val rootInput = branch.setPosition(leaf, entry)
+      // create an array with the right size
+      val out = makeOutput((endPosition - rootInput.getPosition) / typeSize)
+      // fill it (while loops are faster than any Scalarific construct)
+      var i = 0
+      while (rootInput.getPosition < endPosition) {
+        out(i) = readOne(rootInput)
+        i += 1
+      }
+      // update the entry number and return the array
+      entry += 1L
+      out
+    }
   }
 
+  class RootTreeIterator(rootTree: TTree, requiredColumns: Array[String], filters: Array[Filter]) extends Iterator[Row] {
+    private val pileup = new RootBranchIterator(rootTree.getBranch("Info").getBranchForName("nPU"))
 
+    private val muonpt = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("pt"))
+    private val muoneta = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("eta"))
+    private val muonphi = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("phi"))
 
-  case class MyTableScan(
-    path: String,
-    count: Int,
-    partitions: Int)
-    (@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan
-  {
+    private val jetpt = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("pt"))
+    private val jeteta = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("eta"))
+    private val jetphi = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("phi"))
+
+    def hasNext = pileup.hasNext
+
+    def next() = {
+      val muonpts = muonpt.next()
+      val muonetas = muoneta.next()
+      val muonphis = muonphi.next()
+      val muon = Array.fill[Row](muonpts.size)(null)
+      var muoni = 0
+      while (muoni < muonpts.size) {
+        muon(muoni) = Row(muonpts(muoni), muonetas(muoni), muonphis(muoni))
+        muoni += 1
+      }
+
+      val jetpts = jetpt.next()
+      val jetetas = jeteta.next()
+      val jetphis = jetphi.next()
+      val jet = Array.fill[Row](jetpts.size)(null)
+      var jeti = 0
+      while (jeti < jetpts.size) {
+        jet(jeti) = Row(jetpts(jeti), jetetas(jeti), jetphis(jeti))
+        jeti += 1
+      }
+
+      Row(pileup.next(), muon, jet)
+    }
+  }
+
+  class RootTableScan(path: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan {
     // hard-coded for now, but generally we'd get this from the TTree
     def schema: StructType =
       StructType(Seq(
-        StructField("pileup", IntegerType, nullable = false)// ,
-        // StructField("muons", ArrayType(StructType(Seq(
-        //   StructField("pt", FloatType, nullable = false),
-        //   StructField("eta", FloatType, nullable = false),
-        //   StructField("phi", FloatType, nullable = false)), nullable = false),
-        //   containsNull = false)),
-        // StructField("jets", ArrayType(StructType(Seq(
-        //   StructField("pt", FloatType, nullable = false),
-        //   StructField("eta", FloatType, nullable = false),
-        //   StructField("phi", FloatType, nullable = false)), nullable = false),
-        //   containsNull = false))
+        StructField("pileup", IntegerType, nullable = false),
+        StructField("muons", ArrayType(StructType(Seq(
+          StructField("pt", FloatType, nullable = false),
+          StructField("eta", FloatType, nullable = false),
+          StructField("phi", FloatType, nullable = false)), nullable = false),
+          containsNull = false)),
+        StructField("jets", ArrayType(StructType(Seq(
+          StructField("pt", FloatType, nullable = false),
+          StructField("eta", FloatType, nullable = false),
+          StructField("phi", FloatType, nullable = false)), nullable = false),
+          containsNull = false))
       ), nullable = false)
 
-
-
-
-
-    private def makeRow(i: Int): Row = Row(i, i*i, i*i*i)
-
-    def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-      val values = (1 to count).map(i => makeRow(i))
-      sqlContext.sparkContext.parallelize(values, partitions)
-    }
-
+    def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
+      // TODO: do a glob file pattern on the path and parallelize over all the names
+      sqlContext.sparkContext.parallelize(Seq(path), 1).
+        map({fileName =>
+          // TODO: support HDFS (may involve changes to root4j)
+          val reader = new RootFileReader(new java.io.File(fileName))
+          // TODO: check for multiple trees in the file
+          val tree = rootTreesInFile(reader).head
+          // the real work starts here
+          RootTreeIterator(rootTree, requiredColumns, filters)
+        })
   }
 
   class DefaultSource extends RelationProvider {
     def createRelation(sqlContext: SQLContext, parameters: Map[String, String]) = {
-      MyTableScan(
-        parameters.getOrElse("path", sys.error("ROOT path must be specified")),
-        parameters("rows").toInt,
-        parameters("partitions").toInt
-      )(sqlContext)
+      RootTableScan(parameters.getOrElse("path", sys.error("ROOT path must be specified")))(sqlContext)
     }
   }
 
 }
-
-
-
-
-
-
-
-
-// package sparkroot {
-//   class DefaultSource extends FileFormat with DataSourceRegister {
-//     override def shortName(): String = "root"
-
-//     override def inferSchema(
-//       sparkSession: SparkSession,
-//       options: Map[String, String],
-//       files: Seq[FileStatus]): Some[StructType] =
-//       // hard-coded for now
-//       Some()
-
-//     def prepareWrite(sparkSession: SparkSession,
-//       job: Job,
-//       options: Map[String, String],
-//       dataSchema: StructType): OutputWriterFactory =
-//       throw new UnsupportedOperationException(s"buildWriter is not supported for $this")
-
-//     def isSplitable(
-//       sparkSession: SparkSession,
-//       options: Map[String, String],
-//       path: Path): Boolean =
-//       false
-
-//     def buildReader(
-//       sparkSession: SparkSession,
-//       dataSchema: StructType,
-//       partitionSchema: StructType,
-//       requiredSchema: StructType,
-//       filters: Seq[Filter],
-//       options: Map[String, String],
-//       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-//       throw new UnsupportedOperationException(s"buildReader is not supported for $this")
-//     }
-
-
-
-
-//   }
-
-
-
-
-
-// }
