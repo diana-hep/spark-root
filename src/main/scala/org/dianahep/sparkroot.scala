@@ -31,14 +31,14 @@ package object sparkroot {
     // TODO: specialize this with [T : TypeTag] and get typeSize from the type
     // this implementation is for T =:= Float
 
-    private val leaf = branch.getLeaves.get(0)
+    private val leaf = branch.getLeaves.get(0).asInstanceOf[TLeaf]
     private val startingEntries = branch.getBasketEntry
     private val typeSize = 4  // Float
 
     private var basket = 0
     private var entry = 0L
 
-    private def lastInBranch = entry == startingEntries[basket + 1] - 1
+    private def lastInBranch = entry == startingEntries(basket + 1) - 1
 
     // this can be specialized in subclasses
     private def makeOutput(size: Int) = Array.fill[Float](size)(0.0f)
@@ -46,7 +46,7 @@ package object sparkroot {
     // as can this
     private def readOne(rootInput: RootInput) = rootInput.readFloat
 
-    def hasNext = basket == startingEntries.size - 1
+    def hasNext = basket != startingEntries.size - 1
 
     def next() = {
       val endPosition =
@@ -65,7 +65,7 @@ package object sparkroot {
       // actually get the data
       val rootInput = branch.setPosition(leaf, entry)
       // create an array with the right size
-      val out = makeOutput((endPosition - rootInput.getPosition) / typeSize)
+      val out = makeOutput((endPosition - rootInput.getPosition).toInt / typeSize)
       // fill it (while loops are faster than any Scalarific construct)
       var i = 0
       while (rootInput.getPosition < endPosition) {
@@ -79,7 +79,7 @@ package object sparkroot {
   }
 
   class RootTreeIterator(rootTree: TTree, requiredColumns: Array[String], filters: Array[Filter]) extends Iterator[Row] {
-    private val pileup = new RootBranchIterator(rootTree.getBranch("Info").getBranchForName("nPU"))
+    private val met = new RootBranchIterator(rootTree.getBranch("Info").getBranchForName("pfMET"))
 
     private val muonpt = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("pt"))
     private val muoneta = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("eta"))
@@ -89,7 +89,7 @@ package object sparkroot {
     private val jeteta = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("eta"))
     private val jetphi = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("phi"))
 
-    def hasNext = pileup.hasNext
+    def hasNext = met.hasNext
 
     def next() = {
       val muonpts = muonpt.next()
@@ -111,8 +111,8 @@ package object sparkroot {
         jet(jeti) = Row(jetpts(jeti), jetetas(jeti), jetphis(jeti))
         jeti += 1
       }
-
-      Row(pileup.next(), muon, jet)
+      
+      Row(met.next().head, muon, jet)
     }
   }
 
@@ -120,36 +120,37 @@ package object sparkroot {
     // hard-coded for now, but generally we'd get this from the TTree
     def schema: StructType =
       StructType(Seq(
-        StructField("pileup", IntegerType, nullable = false),
+        StructField("met", FloatType, nullable = false),
         StructField("muons", ArrayType(StructType(Seq(
           StructField("pt", FloatType, nullable = false),
           StructField("eta", FloatType, nullable = false),
-          StructField("phi", FloatType, nullable = false)), nullable = false),
-          containsNull = false)),
+          StructField("phi", FloatType, nullable = false))),
+          containsNull = false), nullable = false),
         StructField("jets", ArrayType(StructType(Seq(
           StructField("pt", FloatType, nullable = false),
           StructField("eta", FloatType, nullable = false),
-          StructField("phi", FloatType, nullable = false)), nullable = false),
-          containsNull = false))
-      ), nullable = false)
+          StructField("phi", FloatType, nullable = false))),
+          containsNull = false), nullable = false)
+      ))
 
     def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
       // TODO: do a glob file pattern on the path and parallelize over all the names
       sqlContext.sparkContext.parallelize(Seq(path), 1).
-        map({fileName =>
+        flatMap({fileName =>
           // TODO: support HDFS (may involve changes to root4j)
           val reader = new RootFileReader(new java.io.File(fileName))
           // TODO: check for multiple trees in the file
-          val tree = rootTreesInFile(reader).head
+          val rootTree = rootTreesInFile(reader).head
           // the real work starts here
-          RootTreeIterator(rootTree, requiredColumns, filters)
+          new RootTreeIterator(rootTree, requiredColumns, filters)
         })
   }
+}
 
+package sparkroot {
   class DefaultSource extends RelationProvider {
     def createRelation(sqlContext: SQLContext, parameters: Map[String, String]) = {
-      RootTableScan(parameters.getOrElse("path", sys.error("ROOT path must be specified")))(sqlContext)
+      new RootTableScan(parameters.getOrElse("path", sys.error("ROOT path must be specified")))(sqlContext)
     }
   }
-
 }
