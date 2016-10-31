@@ -125,12 +125,12 @@ package object sparkroot {
           StructField("pt", FloatType, nullable = false),
           StructField("eta", FloatType, nullable = false),
           StructField("phi", FloatType, nullable = false))),
-          containsNull = false), nullable = false),
+          containsNull = true), nullable = true),
         StructField("jets", ArrayType(StructType(Seq(
           StructField("pt", FloatType, nullable = false),
           StructField("eta", FloatType, nullable = false),
           StructField("phi", FloatType, nullable = false))),
-          containsNull = false), nullable = false)
+          containsNull = true), nullable = true)
       ))
 
     def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
