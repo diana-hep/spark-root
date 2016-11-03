@@ -11,9 +11,9 @@ import org.apache.spark.sql.sources.PrunedFilteredScan
 import org.apache.spark.sql.sources.RelationProvider
 import org.apache.spark.sql.types._
 
-import hep.io.root.core.RootInput
-import hep.io.root._
-import hep.io.root.interfaces._
+import org.dianahep.root4j.core.RootInput
+import org.dianahep.root4j._
+import org.dianahep.root4j.interfaces._
 
 package object sparkroot {
   implicit class RootDataFrameReader(reader: DataFrameReader) {
@@ -21,11 +21,14 @@ package object sparkroot {
     def root(path: String) = reader.format("org.dianahep.sparkroot").load(path)
   }
 
-  def rootTreesInFile(reader: RootFileReader) =
+  def rootTreesInFile(reader: RootFileReader) = 
+  {
     // TODO: search subdirectories for TTrees
-    (0 until reader.nKeys).
-      filter(i => reader.getKey(i).getObjectClass.getClassName == "TTree").
-      map(i => reader.getKey(i).getObject.asInstanceOf[hep.io.root.interfaces.TTree])
+    val dir = reader.get("ntuplemaker_H2DiMuonMaker").asInstanceOf[org.dianahep.root4j.interfaces.TDirectory]
+    (0 until dir.nKeys).
+      filter(i => dir.getKey(i).getObjectClass.getClassName == "TTree").
+      map(i => dir.getKey(i).getObject.asInstanceOf[org.dianahep.root4j.interfaces.TTree])
+  }
 
   class RootBranchIterator(branch: TBranch) extends Iterator[Array[Float]] {
     // TODO: specialize this with [T : TypeTag] and get typeSize from the type
@@ -79,29 +82,35 @@ package object sparkroot {
   }
 
   class RootTreeIterator(rootTree: TTree, requiredColumns: Array[String], filters: Array[Filter]) extends Iterator[Row] {
-    private val met = new RootBranchIterator(rootTree.getBranch("Info").getBranchForName("pfMET"))
+//    private val met = new RootBranchIterator(rootTree.getBranch("Info").getBranchForName("pfMET"))
 
-    private val muonpt = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("pt"))
-    private val muoneta = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("eta"))
+    private val muonpt = new RootBranchIterator(rootTree.getBranch("Muons").getBranchForName("_pt"))
+    private val muonq = new RootBranchIterator(rootTree.getBranch("Muons").getBranchForName("_charge"))
+    private val muoneta = new RootBranchIterator(rootTree.getBranch("Muons").getBranchForName("_eta"))
+    private val muonphi = new RootBranchIterator(rootTree.getBranch("Muons").getBranchForName("_phi"))
+/*    private val muoneta = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("eta"))
     private val muonphi = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("phi"))
 
     private val jetpt = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("pt"))
     private val jeteta = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("eta"))
     private val jetphi = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("phi"))
+    */
 
-    def hasNext = met.hasNext
+    def hasNext = muonpt.hasNext
 
     def next() = {
       val muonpts = muonpt.next()
+      val muonqs = muonq.next()
       val muonetas = muoneta.next()
       val muonphis = muonphi.next()
       val muon = Array.fill[Row](muonpts.size)(null)
       var muoni = 0
       while (muoni < muonpts.size) {
-        muon(muoni) = Row(muonpts(muoni), muonetas(muoni), muonphis(muoni))
+        muon(muoni) = Row(muonpts(muoni), muonqs(muoni), muonetas(muoni), muonphis(muoni))
+//        muon(muoni) = Row(muonpts(muoni))
         muoni += 1
       }
-
+/*
       val jetpts = jetpt.next()
       val jetetas = jeteta.next()
       val jetphis = jetphi.next()
@@ -110,9 +119,10 @@ package object sparkroot {
       while (jeti < jetpts.size) {
         jet(jeti) = Row(jetpts(jeti), jetetas(jeti), jetphis(jeti))
         jeti += 1
-      }
+      }*/
       
-      Row(met.next().head, muon, jet)
+      //Row(met.next().head, muon, jet)
+      Row(muon)
     }
   }
 
@@ -120,17 +130,18 @@ package object sparkroot {
     // hard-coded for now, but generally we'd get this from the TTree
     def schema: StructType =
       StructType(Seq(
-        StructField("met", FloatType, nullable = false),
+//        StructField("met", FloatType, nullable = false),
         StructField("muons", ArrayType(StructType(Seq(
           StructField("pt", FloatType, nullable = false),
-          StructField("eta", FloatType, nullable = false),
-          StructField("phi", FloatType, nullable = false))),
-          containsNull = false), nullable = false),
-        StructField("jets", ArrayType(StructType(Seq(
-          StructField("pt", FloatType, nullable = false),
+          StructField("q", FloatType, nullable=false),
           StructField("eta", FloatType, nullable = false),
           StructField("phi", FloatType, nullable = false))),
           containsNull = false), nullable = false)
+  //      StructField("jets", ArrayType(StructType(Seq(
+  //        StructField("pt", FloatType, nullable = false),
+  //        StructField("eta", FloatType, nullable = false),
+  //        StructField("phi", FloatType, nullable = false))),
+  //        containsNull = false), nullable = false)
       ))
 
     def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
