@@ -54,7 +54,7 @@ scala> for (x <- df) println(x)
     [WrappedArray([91.52747,0.0,-2.2693365,-2.974106], [67.13079,0.0,-2.2886407,-2.958496], [46.67421,0.0,-1.9730823,1.4727383])]
 
 ------
-each WrappedArray corresponds to 1 TTree Entry with 2 or more muon objects per muon.
+each WrappedArray corresponds to 1 TTree Entry with 2 or more muon objects per 1 Array.
 Can use pattern matching with case classes.
 ------
 scala> case class Muon(pt: Float, q: Int, eta: Float, phi: Float);
@@ -73,10 +73,10 @@ this way it is much easier to identify what is what... and makes it much more el
 
 ## TODO List
 - [ ] **Schema Inferral** - use the TTree with TStreamerInfo to identify the classes and their descriptions to be able to automatically infer the schema from the [ROOT](https://root.cern.ch/) and convert it to Spark's __StructType__
-  1. Probably to filter out the columns(branches) that are not needed should be included somehow.
+  1. Probably filtering of the columns(branches) that are not needed should be included somehow.
 - [ ] **HDFS File Access and Locality** - Extend [root4j](https://github.com/diana-hep/root4j) to read the data on Hadoop Distributed File System. 
 - [ ] **Support TRef Functionality** - Allow for the cross-references among columns (example of separate muons and tracks collections, but with internal references from one to the other). We have to be able to programmatically identify these references.
-- [ ] **Naming Aliases** - Physics Analysis Specific, full names of objects are typically very long - need aliases to simplify it.
+- [ ] **Naming Aliases** - Physics Analysis Specific, full names of objects are typically very long - need aliases to simplify that.
 - [ ] **Pruning, Filtering "push-down"** - early stage filtering
 - [ ] **Tuning** - tuning file partitioning, etc... The full set of parameters will be identified down the road.
 - [ ] **Testing, Testing and once more Testing!**
