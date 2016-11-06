@@ -15,4 +15,4 @@ sparkVersion := "2.0.0"
 sparkComponents := Seq("sql")
 
 resolvers += Resolver.mavenLocal
-libraryDependencies += "org.diana-hep" % "root4j" % "1.0-pre1"
+libraryDependencies += "org.diana-hep" % "root4j" % "1.0-pre2"
