@@ -7,7 +7,7 @@ Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/)
 - Apache Spark 2.0.
 - Scala 2.11
 
-## Quick Test Example
+## Quick Test Example - No Schema inferring.
 ```
 ./spark-shell --packages org.diana-hep:spark-root_2.11:0.1-pre1,com.databricks:spark-avro_2.11:3.0.1
 import org.dianahep.sparkroot._
@@ -40,6 +40,31 @@ warning: there was one feature warning; re-run with -feature for details
 |[[47.028915,0.0,1...|
 +--------------------+
 only showing top 20 rows
+
+scala> for (x <- df) println(x)
+    [WrappedArray([46.21682,0.0,0.23936497,-0.06334016], [40.08369,0.0,1.0085266,-2.7310233])]
+    [WrappedArray([29.387526,0.0,-0.8683134,-1.2712506], [12.471459,0.0,-0.98095286,-1.5620013])]
+    [WrappedArray([66.35497,0.0,-2.2571073,1.7760249], [14.915713,0.0,-0.019391235,1.1315428])]
+    [WrappedArray([39.299873,0.0,-1.3723173,-2.41111], [18.740532,0.0,-1.4823006,-2.3708372])]
+    [WrappedArray([44.04615,0.0,0.5730408,3.01369], [42.99739,0.0,1.411812,-0.06999289])]
+    [WrappedArray([91.52747,0.0,-2.2693365,-2.974106], [67.13079,0.0,-2.2886407,-2.958496], [46.67421,0.0,-1.9730823,1.4727383])]
+
+------
+each WrappedArray corresponds to 1 TTree Entry with 2 or more muon objects per muon.
+Can use pattern matching with case classes.
+------
+scala> case class Muon(pt: Float, q: Int, eta: Float, phi: Float);
+scala> case class Event(muons: Seq[Muon]);
+scala> val rdd = df.as[Event]
+scala> for (x <- rdd) println(x)
+    Event(WrappedArray(Muon(46.21682,0,0.23936497,-0.06334016), Muon(40.08369,0,1.0085266,-2.7310233)))
+    Event(WrappedArray(Muon(29.387526,0,-0.8683134,-1.2712506), Muon(12.471459,0,-0.98095286,-1.5620013)))
+    Event(WrappedArray(Muon(66.35497,0,-2.2571073,1.7760249), Muon(14.915713,0,-0.019391235,1.1315428)))
+    Event(WrappedArray(Muon(39.299873,0,-1.3723173,-2.41111), Muon(18.740532,0,-1.4823006,-2.3708372)))
+
+------
+this way it is much easier to identify what is what... and makes it much more elegant for analysis
+------
 ```
 
-## TODO list
+## TODO List
