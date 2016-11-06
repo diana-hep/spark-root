@@ -71,7 +71,7 @@ this way it is much easier to identify what is what... and makes it much more el
 ```
 
 ## TODO List
-- [ ] **Schema Inferral** - use the TTree with TStreamerInfo to identify the classes and their descriptions to be able to automatically infer the schema from the [ROOT](https://root.cern.ch/).
+- [ ] **Schema Inferral** - use the TTree with TStreamerInfo to identify the classes and their descriptions to be able to automatically infer the schema from the [ROOT](https://root.cern.ch/) and convert it to Spark's __StructType__
   1. Probably to filter out the columns(branches) that are not needed should be included
 - [ ] **HDFS File Access and Locality** - Extend [root4j](https://github.com/diana-hep/root4j) to read the data on Hadoop Distributed File System. 
 - [ ] **Support TRef Functionality** - Allow for the cross-references among columns (example of separate muons and tracks collections, but with internal references from one to the other). We have to be able to programmatically identify these references.
