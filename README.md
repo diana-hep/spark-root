@@ -12,6 +12,9 @@ Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/)
 ./spark-shell --packages org.diana-hep:spark-root_2.11:0.1-pre1,com.databricks:spark-avro_2.11:3.0.1
 import org.dianahep.sparkroot._
 val df = spark.sqlContext.read.root("/Users/vk/software/diana-hep/test_data/test_1.root")
+------
+NOTE: read interface is analogous to AVRO or Parquet, or other formats: json....
+------
 
 scala> df show
 warning: there was one feature warning; re-run with -feature for details
@@ -68,3 +71,11 @@ this way it is much easier to identify what is what... and makes it much more el
 ```
 
 ## TODO List
+1. **Schema Inferral** - use the TTree with TStreamerInfo to identify the classes and their descriptions to be able to automatically infer the schema from the [ROOT](https://root.cern.ch/).
+  1. Probably to filter out the columns(branches) that are not needed should be included
+2. **HDFS File Access and Locality** - Extend [root4j](https://github.com/diana-hep/root4j) to read the data on Hadoop Distributed File System. 
+3. **Support TRef Functionality** - Allow for the cross-references among columns (example of separate muons and tracks collections, but with internal references from one to the other). We have to be able to programmatically identify these references.
+4. **Naming Aliases** - Physics Analysis Specific, full names of objects are typically very long - need aliases to simplify it.
+5. **Pruning, Filtering "push-down"** - early stage filtering
+6. **Tuning** - tuning file partitioning, etc... The full set of parameters will be identified down the road.
+7. **Testing, Testing and once more Testing!**
