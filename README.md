@@ -6,6 +6,7 @@ Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/)
 ## Requirements
 - Apache Spark 2.0.
 - Scala 2.11
+- [root4j](https://github.com/diana-hep/root4j) - __installed locally - available in the local Maven cache__
 
 ## Quick Test Example - No Schema inferring.
 ```
@@ -72,7 +73,7 @@ this way it is much easier to identify what is what... and makes it much more el
 
 ## TODO List
 - [ ] **Schema Inferral** - use the TTree with TStreamerInfo to identify the classes and their descriptions to be able to automatically infer the schema from the [ROOT](https://root.cern.ch/) and convert it to Spark's __StructType__
-  1. Probably to filter out the columns(branches) that are not needed should be included
+  1. Probably to filter out the columns(branches) that are not needed should be included somehow.
 - [ ] **HDFS File Access and Locality** - Extend [root4j](https://github.com/diana-hep/root4j) to read the data on Hadoop Distributed File System. 
 - [ ] **Support TRef Functionality** - Allow for the cross-references among columns (example of separate muons and tracks collections, but with internal references from one to the other). We have to be able to programmatically identify these references.
 - [ ] **Naming Aliases** - Physics Analysis Specific, full names of objects are typically very long - need aliases to simplify it.
