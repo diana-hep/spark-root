@@ -17,6 +17,6 @@ project/plugins/project/
 .worksheet
 
 # eclipse
-.classpth
+.classpath
 .project
 .settings/
