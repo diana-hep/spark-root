@@ -126,9 +126,54 @@ package object sparkroot {
     }
   }
 
+  object SchemaGenerator
+  {
+    def build(filename: String): Unit = 
+    {
+      //  get the reader
+      //  find the TTree - for now assume there is only 1
+      val reader = new RootFileReader(new java.io.File(filename))
+      val tree = findTree(reader.getTopDir)
+      //  print the tree
+      val branches = tree.getBranches
+      val leaves = tree.getLeaves
+      println(s"Branch Size = ${branches.size}", s"Leaves size = ${leaves.size}")
+      for (x <- 0 until leaves.size; y=leaves.get(x).asInstanceOf[TLeafElement]) 
+        println(y.getName, "  ", y.getTitle, "  ", y.getType)
+
+      if (tree==null) throw new Exception("TTree is not found")
+      val slist = (for (i <- 0 until reader.streamerInfo.size) yield 
+        reader.streamerInfo.get(i)).filter(_.asInstanceOf[core.AbstractRootObject].
+          getRootClass.getClassName=="TStreamerInfo")
+      //  printing the TStreamerInfo Record
+      for (x <- slist; y=x.asInstanceOf[TStreamerInfo]; i <- 0 until y.getElements.size;
+        elem = y.getElements.get(i).asInstanceOf[TStreamerElement]) 
+        println(y.getName, "  ", y.getTitle, "  ", elem, "  ", elem.getType, "  ", elem.getTypeName, "  ",
+          elem.getName, "  ", elem.getTitle, "  ", elem.getSize, "  ", elem.getArrayLength)
+    }
+
+    def findTree(dir: TDirectory): TTree = 
+    {
+      for (i <- 0 until dir.nKeys)
+      {
+        val obj = dir.getKey(i).getObject.asInstanceOf[core.AbstractRootObject]
+        if (obj.getRootClass.getClassName=="TDirectory" || 
+          obj.getRootClass.getClassName=="TTree")
+        {
+          if (obj.getRootClass.getClassName=="TDirectory")
+            return findTree(obj.asInstanceOf[TDirectory])
+          else (obj.getRootClass.getClassName=="TTree")
+            return obj.asInstanceOf[TTree]
+        }
+      }
+      null
+    }
+  }
+
   class RootTableScan(path: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan {
-    // hard-coded for now, but generally we'd get this from the TTree
-    def schema: StructType =
+    //  get the schema from the head file
+//    def schema: StructType = SchemaGenerator.build(Seq(path) head)
+    def schema: StructType = 
       StructType(Seq(
 //        StructField("met", FloatType, nullable = false),
         StructField("muons", ArrayType(StructType(Seq(
@@ -142,7 +187,7 @@ package object sparkroot {
   //        StructField("eta", FloatType, nullable = false),
   //        StructField("phi", FloatType, nullable = false))),
   //        containsNull = false), nullable = false)
-/*          StructField("eta", FloatType, nullable = false),
+  /*        StructField("eta", FloatType, nullable = false),
           StructField("phi", FloatType, nullable = false))),
           containsNull = true), nullable = true),
         StructField("jets", ArrayType(StructType(Seq(
