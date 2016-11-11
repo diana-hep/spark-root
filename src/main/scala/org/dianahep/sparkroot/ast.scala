@@ -102,13 +102,25 @@ package object ast
     }
 
     class LeafInfo(
-        val name: String, val title: String, val classname: String, val len: Int)
+        val name: String, 
+        val title: String, 
+        val classname: String, 
+        val len: Int, // #fixed size elements
+        val ltype: Int)  // leaf type
     {
-        override def toString = (name, title, classname, len).toString
+        override def toString = (name, title, classname, len, ltype).toString
     }
-    class NodeInfo(val name: String, val title: String, val classname: String, val iter: hook)
+    class NodeInfo(
+      val name: String, 
+      val title: String, 
+      val classname: String, 
+      val iter: hook,
+      val streamer_type: Int, // Type of the Streamer
+      val branch_type: Int, // Type of the Branch - Type of the TBranchElement
+      val objClassName: String)
     {
-        override def toString = (name, title, classname).toString
+        override def toString = (name, title, classname,
+          streamer_type, branch_type, objClassName).toString
     }
     abstract class AbstractSchemaTree;
     case class Leaf(info: LeafInfo) extends AbstractSchemaTree
@@ -236,27 +248,60 @@ package object ast
         def iterate(branch: TBranch): AbstractSchemaTree =
         {
             if (branch.getBranches.size()>0)
+            {
+              if (branch.isInstanceOf[TBranchElement])
+              {
+                val branchElement = branch.asInstanceOf[TBranchElement]
                 new ComplexNode(
                     {
-                      for (i <- 0 until branch.getBranches.size; 
-                      b=branch.getBranches.get(i).asInstanceOf[TBranch]) 
+                      for (i <- 0 until branchElement.getBranches.size; 
+                      b=branchElement.getBranches.get(i).asInstanceOf[TBranch]) 
                       yield iterate(b)
                     },
-                    new NodeInfo(branch.getName, branch.getTitle, 
-                      branch.getRootClass.getClassName, null))
+                    new NodeInfo(branchElement.getName, 
+                      branchElement.getTitle, 
+                      branchElement.getRootClass.getClassName, null,
+                      branchElement.getStreamerType, branchElement.getType,
+                      branchElement.getClassName))
+              }
+              else 
+                new ComplexNode(
+                {for (i <- 0 until branch.getBranches.size; 
+                  b=branch.getBranches.get(i).asInstanceOf[TBranch]) yield iterate(b)},
+                  new NodeInfo(branch.getName, branch.getTitle, 
+                    branch.getRootClass.getClassName, null, -1, -1, ""
+                ))
+            } // if a complex node or a simple node
             else
             {
-                val l = branch.getLeaves.get(0).asInstanceOf[TLeaf]
+              val l = branch.getLeaves.get(0).asInstanceOf[TLeaf]
+              if (l.isInstanceOf[TLeafElement])
+              {
+                val ll = l.asInstanceOf[TLeafElement]
+                val branchElement = branch.asInstanceOf[TBranchElement]
                 new SimpleNode(new Leaf(new LeafInfo(
-                    l.getName, l.getTitle, l.getRootClass.getClassName, l.getLen
-                )), new NodeInfo(branch.getName, branch.getTitle, branch.getRootClass.getClassName,
-                iteratorByLeafClassName(branch, l.getRootClass.getClassName)))
+                  ll.getName, ll.getTitle, ll.getRootClass.getClassName, 
+                  ll.getLen, ll.getType
+                )), new NodeInfo(branchElement.getName, branchElement.getTitle, 
+                  branchElement.getRootClass.getClassName, null, 
+                  branchElement.getStreamerType, branchElement.getType, 
+                  branchElement.getClassName))
+              }
+              else
+                new SimpleNode(new Leaf(new LeafInfo(
+                    l.getName, l.getTitle, l.getRootClass.getClassName, l.getLen, -1
+                )), new NodeInfo(branch.getName, branch.getTitle, 
+                  branch.getRootClass.getClassName,
+                  iteratorByLeafClassName(branch, l.getRootClass.getClassName),
+                  -1, -1, ""))
             }
         }
 
         new ComplexNode(
-            for (i <- 0 until tree.getBranches.size; b=tree.getBranch(i).asInstanceOf[TBranch]) yield
-                iterate(b), new NodeInfo(tree.getName, tree.getTitle, "TTree", null))
+            for (i <- 0 until tree.getBranches.size; 
+              b=tree.getBranch(i).asInstanceOf[TBranch]) yield
+              iterate(b), new NodeInfo(tree.getName, tree.getTitle, "TTree", 
+                null,-1,-1,""))
     }
 
     def printAST(ast: AbstractSchemaTree): Unit =
