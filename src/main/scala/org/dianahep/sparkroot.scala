@@ -14,189 +14,44 @@ import org.apache.spark.sql.types._
 import org.dianahep.root4j.core.RootInput
 import org.dianahep.root4j._
 import org.dianahep.root4j.interfaces._
+import sparkroot.ast._
 
 package object sparkroot {
+  /**
+   * An impolicit DataFrame Reader
+   */
   implicit class RootDataFrameReader(reader: DataFrameReader) {
     def root(paths: String*) = reader.format("org.dianahep.sparkroot").load(paths: _*)
     def root(path: String) = reader.format("org.dianahep.sparkroot").load(path)
   }
 
-  def rootTreesInFile(reader: RootFileReader) = 
-  {
-    // TODO: search subdirectories for TTrees
-    val dir = reader.get("ntuplemaker_H2DiMuonMaker").asInstanceOf[org.dianahep.root4j.interfaces.TDirectory]
-    (0 until dir.nKeys).
-      filter(i => dir.getKey(i).getObjectClass.getClassName == "TTree").
-      map(i => dir.getKey(i).getObject.asInstanceOf[org.dianahep.root4j.interfaces.TTree])
-  }
-
-  class RootBranchIterator(branch: TBranch) extends Iterator[Array[Float]] {
-    // TODO: specialize this with [T : TypeTag] and get typeSize from the type
-    // this implementation is for T =:= Float
-
-    private val leaf = branch.getLeaves.get(0).asInstanceOf[TLeaf]
-    private val startingEntries = branch.getBasketEntry
-    private val typeSize = 4  // Float
-
-    private var basket = 0
-    private var entry = 0L
-
-    private def lastInBranch = entry == startingEntries(basket + 1) - 1
-
-    // this can be specialized in subclasses
-    private def makeOutput(size: Int) = Array.fill[Float](size)(0.0f)
-
-    // as can this
-    private def readOne(rootInput: RootInput) = rootInput.readFloat
-
-    def hasNext = basket != startingEntries.size - 1
-
-    def next() = {
-      val endPosition =
-        if (lastInBranch) {
-          // the endPosition comes from a byte marker in the ROOT header
-          val rootInput = branch.setPosition(leaf, entry)
-          basket += 1   // this is the last entry in the basket, better update the basket number
-          rootInput.getLast
-        }
-        else {
-          // the endPosition is where the next entry starts (in this basket)
-          val rootInput = branch.setPosition(leaf, entry + 1)
-          rootInput.getPosition
-        }
-
-      // actually get the data
-      val rootInput = branch.setPosition(leaf, entry)
-      // create an array with the right size
-      val out = makeOutput((endPosition - rootInput.getPosition).toInt / typeSize)
-      // fill it (while loops are faster than any Scalarific construct)
-      var i = 0
-      while (rootInput.getPosition < endPosition) {
-        out(i) = readOne(rootInput)
-        i += 1
-      }
-      // update the entry number and return the array
-      entry += 1L
-      out
-    }
-  }
-
+  /**
+   *  ROOT TTree Iterator
+   *  - iterates over the tree
+   */
   class RootTreeIterator(rootTree: TTree, requiredColumns: Array[String], filters: Array[Filter]) extends Iterator[Row] {
-//    private val met = new RootBranchIterator(rootTree.getBranch("Info").getBranchForName("pfMET"))
 
-    private val muonpt = new RootBranchIterator(rootTree.getBranch("Muons").getBranchForName("_pt"))
-    private val muonq = new RootBranchIterator(rootTree.getBranch("Muons").getBranchForName("_charge"))
-    private val muoneta = new RootBranchIterator(rootTree.getBranch("Muons").getBranchForName("_eta"))
-    private val muonphi = new RootBranchIterator(rootTree.getBranch("Muons").getBranchForName("_phi"))
-/*    private val muoneta = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("eta"))
-    private val muonphi = new RootBranchIterator(rootTree.getBranch("Muon").getBranchForName("phi"))
+    //  Abstract Schema Tree
+    private val ast = buildAST(rootTree)
 
-    private val jetpt = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("pt"))
-    private val jeteta = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("eta"))
-    private val jetphi = new RootBranchIterator(rootTree.getBranch("AK4CHS").getBranchForName("phi"))
-    */
+    //  next exists
+    def hasNext = containsNext(ast)
 
-    def hasNext = muonpt.hasNext
-
-    def next() = {
-      val muonpts = muonpt.next()
-      val muonqs = muonq.next()
-      val muonetas = muoneta.next()
-      val muonphis = muonphi.next()
-      val muon = Array.fill[Row](muonpts.size)(null)
-      var muoni = 0
-      while (muoni < muonpts.size) {
-        muon(muoni) = Row(muonpts(muoni), muonqs(muoni), muonetas(muoni), muonphis(muoni))
-//        muon(muoni) = Row(muonpts(muoni))
-        muoni += 1
-      }
-/*
-      val jetpts = jetpt.next()
-      val jetetas = jeteta.next()
-      val jetphis = jetphi.next()
-      val jet = Array.fill[Row](jetpts.size)(null)
-      var jeti = 0
-      while (jeti < jetpts.size) {
-        jet(jeti) = Row(jetpts(jeti), jetetas(jeti), jetphis(jeti))
-        jeti += 1
-      }*/
-      
-      //Row(met.next().head, muon, jet)
-      Row(muon)
-    }
+    //  get the next Row
+    def next() = generateSparkRow(ast)
   }
 
-  object SchemaGenerator
-  {
-    def build(filename: String): Unit = 
-    {
-      //  get the reader
-      //  find the TTree - for now assume there is only 1
-      val reader = new RootFileReader(new java.io.File(filename))
-      val tree = findTree(reader.getTopDir)
-      //  print the tree
-      val branches = tree.getBranches
-      val leaves = tree.getLeaves
-      println(s"Branch Size = ${branches.size}", s"Leaves size = ${leaves.size}")
-      for (x <- 0 until leaves.size; y=leaves.get(x).asInstanceOf[TLeafElement]) 
-        println(y.getName, "  ", y.getTitle, "  ", y.getType)
-
-      if (tree==null) throw new Exception("TTree is not found")
-      val slist = (for (i <- 0 until reader.streamerInfo.size) yield 
-        reader.streamerInfo.get(i)).filter(_.asInstanceOf[core.AbstractRootObject].
-          getRootClass.getClassName=="TStreamerInfo")
-      //  printing the TStreamerInfo Record
-      for (x <- slist; y=x.asInstanceOf[TStreamerInfo]; i <- 0 until y.getElements.size;
-        elem = y.getElements.get(i).asInstanceOf[TStreamerElement]) 
-        println(y.getName, "  ", y.getTitle, "  ", elem, "  ", elem.getType, "  ", elem.getTypeName, "  ",
-          elem.getName, "  ", elem.getTitle, "  ", elem.getSize, "  ", elem.getArrayLength)
-    }
-
-    def findTree(dir: TDirectory): TTree = 
-    {
-      for (i <- 0 until dir.nKeys)
-      {
-        val obj = dir.getKey(i).getObject.asInstanceOf[core.AbstractRootObject]
-        if (obj.getRootClass.getClassName=="TDirectory" || 
-          obj.getRootClass.getClassName=="TTree")
-        {
-          if (obj.getRootClass.getClassName=="TDirectory")
-            return findTree(obj.asInstanceOf[TDirectory])
-          else (obj.getRootClass.getClassName=="TTree")
-            return obj.asInstanceOf[TTree]
-        }
-      }
-      null
-    }
-  }
-
+  /**
+   * 1. Builds the Schema
+   * 2. Maps execution of each file to a Tree iterator
+   */
   class RootTableScan(path: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan {
-    //  get the schema from the head file
-//    def schema: StructType = SchemaGenerator.build(Seq(path) head)
-    def schema: StructType = 
-      StructType(Seq(
-//        StructField("met", FloatType, nullable = false),
-        StructField("muons", ArrayType(StructType(Seq(
-          StructField("pt", FloatType, nullable = false),
-          StructField("q", FloatType, nullable=false),
-          StructField("eta", FloatType, nullable = false),
-          StructField("phi", FloatType, nullable = false))),
-          containsNull = false), nullable = false)
-  //      StructField("jets", ArrayType(StructType(Seq(
-  //        StructField("pt", FloatType, nullable = false),
-  //        StructField("eta", FloatType, nullable = false),
-  //        StructField("phi", FloatType, nullable = false))),
-  //        containsNull = false), nullable = false)
-  /*        StructField("eta", FloatType, nullable = false),
-          StructField("phi", FloatType, nullable = false))),
-          containsNull = true), nullable = true),
-        StructField("jets", ArrayType(StructType(Seq(
-          StructField("pt", FloatType, nullable = false),
-          StructField("eta", FloatType, nullable = false),
-          StructField("phi", FloatType, nullable = false))),
-          containsNull = true), nullable = true)
-        */
-      ))
+    private val ast: AbstractSchemaTree = 
+    {
+      val reader = new RootFileReader(new java.io.File(Seq(path) head))
+      buildAST(findTree(reader.getTopDir)) 
+    }
+    def schema: StructType = generateSparkSchema(ast)
 
     def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
       // TODO: do a glob file pattern on the path and parallelize over all the names
@@ -205,13 +60,16 @@ package object sparkroot {
           // TODO: support HDFS (may involve changes to root4j)
           val reader = new RootFileReader(new java.io.File(fileName))
           // TODO: check for multiple trees in the file
-          val rootTree = rootTreesInFile(reader).head
+          val rootTree = findTree(reader.getTopDir)
           // the real work starts here
           new RootTreeIterator(rootTree, requiredColumns, filters)
         })
   }
 }
 
+/**
+ *  Default Source - spark.sqlContext.read.root(filename) will be directed here!
+ */
 package sparkroot {
   class DefaultSource extends RelationProvider {
     def createRelation(sqlContext: SQLContext, parameters: Map[String, String]) = {
