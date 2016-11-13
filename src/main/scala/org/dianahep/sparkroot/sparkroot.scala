@@ -32,13 +32,13 @@ package object sparkroot {
   class RootTreeIterator(rootTree: TTree, requiredColumns: Array[String], filters: Array[Filter]) extends Iterator[Row] {
 
     //  Abstract Schema Tree
-    private val ast = buildAST(rootTree)
+    private val ast = buildAST(rootTree, null)
 
     //  next exists
     def hasNext = containsNext(ast)
 
     //  get the next Row
-    def next() = generateSparkRow(ast)
+    def next() = buildSparkRow(ast)
   }
 
   /**
@@ -49,9 +49,9 @@ package object sparkroot {
     private val ast: AbstractSchemaTree = 
     {
       val reader = new RootFileReader(new java.io.File(Seq(path) head))
-      buildAST(findTree(reader.getTopDir)) 
+      buildAST(findTree(reader.getTopDir), null) 
     }
-    def schema: StructType = generateSparkSchema(ast)
+    def schema: StructType = buildSparkSchema(ast)
 
     def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] =
       // TODO: do a glob file pattern on the path and parallelize over all the names
