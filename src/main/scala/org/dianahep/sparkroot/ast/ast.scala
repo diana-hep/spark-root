@@ -41,7 +41,7 @@ package object ast
   //  simple TBranch/TLeaf representations
   class Leaf(val info: LeafInfo) extends AbstractSchemaTree;
   case class TerminalNode(leaf: Leaf, info: NodeInfo, 
-    iter: BranchIterator[Any]) extends AbstractSchemaTree;
+    iter: BasicBranchIterator) extends AbstractSchemaTree;
   case class TerminalMultiLeafNode(leaves: Seq[Leaf], info: NodeInfo,
     iter: StructBranchIterator) extends AbstractSchemaTree;
   case class Node(subnodes: Seq[AbstractSchemaTree], info: NodeInfo) 
@@ -58,7 +58,8 @@ package object ast
    * for simple branches - these are the ROOT Type/Codes => our internal type system
    * @return - return the DataType representing the code
    */
-  def assignTypeByLeafCode(code: Char): SRType = code match
+  def assignLeafTypeByLeafClass(leaf: TLeaf): SRType = 
+    leaf.getRootClass.getClassName.last match
   {
     case 'C' => SRStringType
     case 'B' => SRByteType
@@ -76,45 +77,24 @@ package object ast
   }
 
   /**
-   *  @return return either 1D array or MultiD Array 
-   *  at this point, fixed dimensions
-   */
-  def checkLeafForArrayType(str: String): SRType = 
-  {
-    val typeCode = assignTypeByLeafCode(str.drop(str.length-1).head)
-
-    def iterate(s: String, srtype: SRMultiArrayType): SRMultiArrayType = 
-    {
-      val idxstart = s.indexOf('[')
-      if (idxstart > -1)
-      {
-        val idxend = s.indexOf(']', idxstart+1)
-        iterate(s.drop(idxend+1), 
-          SRMultiArrayType( typeCode,  s.slice(idxstart+1, idxend).toInt +: srtype.dims))
-      }
-      else 
-        srtype
-    }
-
-    //  format name is varname[dim][dim]/T
-    if (str.indexOf('[') == -1) typeCode // not an array type
-    else iterate(str, SRMultiArrayType(typeCode, Seq()))  // check for array dims
-  }
-
-  /**
    * @return - Return the full Simple SR Data Type for this terminal branch
    */
-  def assignType(branch: TBranch): SRType = 
+  def assignBranchType(branch: TBranch): SRType = 
   {
-    val leavesTypes = branch.getTitle.split(":")
-    if (leavesTypes.length>1) SRStructType(
-      for (x <- leavesTypes) yield (
-        if (x.contains('[')) x.slice(0, x.indexOf('['))
-        else x.dropRight(2)
-        , checkLeafForArrayType(x))
+    val leaves = branch.getLeaves
+    if (leaves.size > 1) SRStructType(
+      for (i <- 0 until leaves.size; leaf=leaves.get(i).asInstanceOf[TLeaf])
+        yield (leaf.getName, assignLeafType(leaf))
     )
+    else assignLeafType(leaves.get(0).asInstanceOf[TLeaf])
+  }
+  
+  def assignLeafType(leaf: TLeaf): SRType = 
+  {
+    if (leaf.getArrayDim>0) // array
+      SRArrayType(assignLeafTypeByLeafClass(leaf), leaf.getArrayDim)
     else
-      checkLeafForArrayType(leavesTypes(0))
+      assignLeafTypeByLeafClass(leaf)
   }
 
   /**
@@ -140,7 +120,7 @@ package object ast
         //  1. extract the information you need(name ,title, classname, datatype)
         //  2. Assign the iterator
         //
-        val mytype = assignType(branch)
+        val mytype = assignBranchType(branch)
         val leaves = branch.getLeaves
         if (leaves.size==1)
         {
@@ -149,7 +129,7 @@ package object ast
             leaf.getName, leaf.getRootClass.getClassName, leaf.getLen
             )), new NodeInfo(
               branch.getName, branch.getTitle, branch.getRootClass.getClassName, mytype
-            ), mytype.getIterator(branch))
+            ), mytype.getIterator(branch).asInstanceOf[BasicBranchIterator])
         }
         else
           new TerminalMultiLeafNode(
@@ -231,7 +211,7 @@ package object ast
         for (x <- subnodes) yield iterate(x)
       )
       case TerminalNode(leaf, info, iter) => iter.next
-      case TerminalMultiLeafNode(_, _, iter) => Row.fromSeq(iter.next)
+      case TerminalMultiLeafNode(_, info, iter) => Row.fromSeq(iter.next)
       case NodeElement(subnodes, info) => Row.fromSeq(
         for (x <- subnodes) yield iterate(x)
       )

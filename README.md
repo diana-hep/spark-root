@@ -5,11 +5,13 @@ Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/)
 
 ## Supported Features
 - Basic Numerical Types (e.g. Int, Float, Double Byte , Short)
-  - Char is represented as Byte
+  - Char is represented as Byte therefore also numeric
 - Single or Multi TLeaf for a branch
   - C like structs stored for a branch are also supported. These are identified in a TTree as a TBranch with multiple TLeafs.
   - Structs can contiain fixed size arrays of any dimension.
 - 1D or N-Dimensional arrays are supported of fixed dimensions and of simple Numerical Types
+- Variable Sized Arrays that follows the standard ROOT's convention. (e.g. in the leaflist you can when you include "var1[othervarname]/I" where *othervarname* is the name of the counter).
+- A character string terminated by the 0 character is supported
 
 ## Requirements
 - Apache Spark 2.0.
