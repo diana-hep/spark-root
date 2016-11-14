@@ -7,6 +7,13 @@ import org.dianahep.root4j.interfaces._
 import scala.reflect.runtime.universe._
 
 /**
+ *  TODO: 
+ *  1. Separate the reading part from the Iterator Abstraction
+ *  2. Optimize the reading of Fixed Sized Types
+ *    currently read them one by one => read a chunk and split it.
+ */
+
+/**
  *  Abstract Class for single-valued iterators
  */
 trait Reader[+T] {
@@ -34,6 +41,49 @@ abstract class BranchIterator[+T : TypeTag](branch: TBranch) extends Iterator[T]
   //  expose only these guys
   def hasNext: Boolean = basket != startingEntries.size-1
   def next: T
+}
+
+/**
+ * Multi Leaf Iterator - basically a struct of fields
+ * TODO:
+ *  1. Currently cannot nest the structs in here for leaves
+ */
+case class StructBranchIterator(branch: TBranch, leafNamesTypes: Seq[(String, SRType)]) 
+  extends BranchIterator[Seq[Any]](branch)
+{
+  override val typeSize = 0
+
+  //  we need the whole list of those leaves 
+  protected val leaves = for (i <- 0 until branch.getLeaves.size; 
+    l=branch.getLeaves.get(i).asInstanceOf[TLeaf]
+  ) yield l
+
+  //  
+  protected def readLeaf(rootInput: RootInput, p: ((String, SRType), TLeaf)) = {
+    // now read either 1 value or an array of values
+    if (p._2.getLen==1) // 1 value
+    {
+      p._1._2.getIterator(branch).asInstanceOf[BasicBranchIterator[Any]].readOne(rootInput)
+    }
+    else { // array of values
+      val iter = p._1._2.getIterator(branch).asInstanceOf[MultiFixedSeqBranchIterator]
+      iter.dimensionalize(
+        for (i <- 0 until p._2.getLen) yield iter.readOne(rootInput)
+      )
+    }
+  }
+
+  def next = {
+    // switch the basket
+    if (lastInBasket) 
+      basket+=1
+
+    //  iterate over all the leaves and read them one by one
+    val rootInput = branch.setPosition(leaf, entry)
+    val data = for (p <- leafNamesTypes.zip(leaves)) yield readLeaf(rootInput, p)
+    entry+=1L
+    data
+  }
 }
 
 /**
@@ -131,7 +181,7 @@ abstract class FixedSeqBranchIterator[+T: TypeTag](branch: TBranch)
 case class MultiFixedSeqBranchIterator(fixedIterator: FixedSeqBranchIterator[Any],
   branch: TBranch, dims: Seq[Int]) extends FixedSeqBranchIterator[Any](branch)
 {
-  private def nextWrapper(x: Seq[Any]): Seq[Any] = {
+  def dimensionalize(x: Seq[Any]): Seq[Any] = {
     def iterate(seq: Seq[Any], d: Seq[Int]): Seq[Any] = d match {
       case xs :: rest => {
         val it = seq.grouped(xs)
@@ -147,7 +197,7 @@ case class MultiFixedSeqBranchIterator(fixedIterator: FixedSeqBranchIterator[Any
   }
 
   // pass the calls to the fixed one but then arrange the results!
-  override def next: Seq[Any] = nextWrapper(fixedIterator.next)
+  override def next: Seq[Any] = dimensionalize(fixedIterator.next)
   override def readOne(rootInput: RootInput) = fixedIterator.readOne(rootInput)
 }
 

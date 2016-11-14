@@ -78,3 +78,15 @@ case class SRMultiArrayType(t: SRType, dims: Seq[Int]) extends SRType
     iterate(dims)
   }
 }
+
+/**
+ * Represents a struct type
+ * TODO: no nesting of structs
+ */
+case class SRStructType(memberNamesTypes: Seq[(String, SRType)]) extends SRType
+{
+  override def getIterator(b: TBranch) = StructBranchIterator(b, memberNamesTypes)
+  override def toSparkType: DataType = StructType(
+    for (p <- memberNamesTypes) yield StructField(p._1, p._2.toSparkType)
+  )
+}

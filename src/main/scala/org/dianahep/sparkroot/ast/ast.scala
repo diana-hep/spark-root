@@ -42,6 +42,8 @@ package object ast
   class Leaf(val info: LeafInfo) extends AbstractSchemaTree;
   case class TerminalNode(leaf: Leaf, info: NodeInfo, 
     iter: BranchIterator[Any]) extends AbstractSchemaTree;
+  case class TerminalMultiLeafNode(leaves: Seq[Leaf], info: NodeInfo,
+    iter: StructBranchIterator) extends AbstractSchemaTree;
   case class Node(subnodes: Seq[AbstractSchemaTree], info: NodeInfo) 
     extends AbstractSchemaTree;
 
@@ -105,8 +107,12 @@ package object ast
   def assignType(branch: TBranch): SRType = 
   {
     val leavesTypes = branch.getTitle.split(":")
-    if (leavesTypes.length>1)
-      SRNull
+    if (leavesTypes.length>1) SRStructType(
+      for (x <- leavesTypes) yield (
+        if (x.contains('[')) x.slice(0, x.indexOf('['))
+        else x.dropRight(2)
+        , checkLeafForArrayType(x))
+    )
     else
       checkLeafForArrayType(leavesTypes(0))
   }
@@ -135,12 +141,25 @@ package object ast
         //  2. Assign the iterator
         //
         val mytype = assignType(branch)
-        val leaf = branch.getLeaves.get(0).asInstanceOf[TLeaf]
-        new TerminalNode(new Leaf(new LeafInfo(
-          leaf.getName, leaf.getRootClass.getClassName, leaf.getLen
-          )), new NodeInfo(
-            branch.getName, branch.getTitle, branch.getRootClass.getClassName, mytype
-          ), mytype.getIterator(branch))
+        val leaves = branch.getLeaves
+        if (leaves.size==1)
+        {
+          val leaf = leaves.get(0).asInstanceOf[TLeaf]
+          new TerminalNode(new Leaf(new LeafInfo(
+            leaf.getName, leaf.getRootClass.getClassName, leaf.getLen
+            )), new NodeInfo(
+              branch.getName, branch.getTitle, branch.getRootClass.getClassName, mytype
+            ), mytype.getIterator(branch))
+        }
+        else
+          new TerminalMultiLeafNode(
+            for (i <- 0 until leaves.size; l=leaves.get(i).asInstanceOf[TLeaf]) yield
+              new Leaf(new LeafInfo( l.getName, l.getRootClass.getClassName, l.getLen
+              )), new NodeInfo(
+                branch.getName, branch.getTitle, branch.getRootClass.getClassName,
+                mytype
+              ), mytype.getIterator(branch).asInstanceOf[StructBranchIterator]
+          )
       }
     }
 
@@ -184,6 +203,9 @@ package object ast
       ))
       case TerminalNode(leaf, info, iter) => StructField(info.name,
         info.myType.toSparkType)
+      case TerminalMultiLeafNode(leaves, info, iter) => StructField(info.name,
+        info.myType.toSparkType
+      )
       case NodeElement(subnodes, info) => StructField(info.name, StructType(
         for (x <- subnodes) yield iterate(x)
       ))
@@ -209,6 +231,7 @@ package object ast
         for (x <- subnodes) yield iterate(x)
       )
       case TerminalNode(leaf, info, iter) => iter.next
+      case TerminalMultiLeafNode(_, _, iter) => Row.fromSeq(iter.next)
       case NodeElement(subnodes, info) => Row.fromSeq(
         for (x <- subnodes) yield iterate(x)
       )
@@ -241,6 +264,9 @@ package object ast
       }
       case TerminalNode(leaf, info, iter) => 
         println(("  "*level) + info + " -> " + leaf.info)
+      case TerminalMultiLeafNode(leaves, info, iter) => {
+        print(("  "*level) + info + " -> " + leaves.map(_.info.toString).mkString(" :: "))
+      }
       case NodeElement(subnodes, info) => {
         println(("  "*level) + info)
         for (x <- subnodes) __print__(x, level+2)
@@ -257,6 +283,7 @@ package object ast
     case RootNode(name, nodes) => containsNext(nodes.head)
       case Node(subnodes, info) => containsNext(subnodes head)
       case TerminalNode(leaf, info, iter) => iter.hasNext
+      case TerminalMultiLeafNode(_, _, iter) => iter.hasNext
       case NodeElement(subnodes, info) => containsNext(subnodes head)
       case TerminalNodeElement(leaf, info, iter) => false
       case _ => false
