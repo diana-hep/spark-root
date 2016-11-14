@@ -6,8 +6,9 @@ Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/)
 ## Supported Features
 - Basic Numerical Types (e.g. Int, Float, Double Byte , Short)
   - Char is represented as Byte
-- Single TLeaf for a branch
-  - C like structs stored for a branch (e.g. where leaflist has "var1/I:var2/I") are not yet supported
+- Single or Multi TLeaf for a branch
+  - C like structs stored for a branch are also supported. These are identified in a TTree as a TBranch with multiple TLeafs.
+  - Structs can contiain fixed size arrays of any dimension.
 - 1D or N-Dimensional arrays are supported of fixed dimensions and of simple Numerical Types
 
 ## Requirements
