@@ -37,6 +37,7 @@ package object ast
   abstract class AbstractSchemaTree;
   case class RootNode(name: String, nodes: Seq[AbstractSchemaTree]) 
     extends AbstractSchemaTree;
+  case class EmptyRootNode(val name: String, var entries: Long) extends AbstractSchemaTree;
 
   //  simple TBranch/TLeaf representations
   class Leaf(val info: LeafInfo) extends AbstractSchemaTree;
@@ -107,7 +108,10 @@ package object ast
   /**
    * @return - returns the AbstractSchemaTree RootNode
    */
-  def buildAST(tree: TTree, streamers: Seq[TStreamerInfo]): AbstractSchemaTree = 
+  def buildAST(tree: TTree, 
+    streamers: Seq[TStreamerInfo], // list of streamers
+    requiredColumns: Array[String] // list of column names that must be preserved
+    ): AbstractSchemaTree = 
   {
     def synthesizeBranch(branch: TBranch): AbstractSchemaTree = 
     {
@@ -196,10 +200,21 @@ package object ast
         synthesizeBranch(branch)
     }
 
-    new RootNode(tree.getName,
-      for (i <- 0 until tree.getNBranches; b=tree.getBranch(i))
-        yield synthesize(b)
-    )
+    requiredColumns match {
+      // for the initialization stage - all the columns to be mapped
+      case null => new RootNode(tree.getName,
+        for (i <- 0 until tree.getNBranches; b=tree.getBranch(i))
+          yield synthesize(b)
+      )
+      // for the cases like count.... 
+      case Array() => new EmptyRootNode(tree.getName, tree.getEntries)
+      // for the non-empty list of columns that are required by for a query
+      case _ => new RootNode(tree.getName,
+        for (i <- 0 until tree.getNBranches; b=tree.getBranch(i) 
+          if requiredColumns.contains(b.getName()))
+          yield synthesize(b)
+      )
+    }
   }
 
   /**
@@ -226,7 +241,8 @@ package object ast
     ast match {
       case RootNode(_, nodes) => StructType(
         for (x <- nodes) yield iterate(x)
-      ) 
+      )
+      case EmptyRootNode(_, _) => StructType(Seq())
       case _ => null
     }
   }
@@ -253,6 +269,7 @@ package object ast
       case RootNode(_, nodes) => Row.fromSeq(
         for (x <- nodes) yield iterate(x)
       )
+      case EmptyRootNode(_, _) => {ast.asInstanceOf[EmptyRootNode].entries-=1; Row();}
     }
   }
 
@@ -268,6 +285,7 @@ package object ast
         println(name)
         for (x <- nodes) __print__(x, level+2)
       }
+      case EmptyRootNode(name, entries) => println(name + " Entries=" + entries)
       case Node(subnodes, info) => {
         println(("  "*level) + info)
         for (x <- subnodes) __print__(x, level+2)
@@ -291,12 +309,13 @@ package object ast
 
   def containsNext(ast: AbstractSchemaTree): Boolean = ast match {
     case RootNode(name, nodes) => containsNext(nodes.head)
-      case Node(subnodes, info) => containsNext(subnodes head)
-      case TerminalNode(leaf, info, iter) => iter.hasNext
-      case TerminalMultiLeafNode(_, _, iter) => iter.hasNext
-      case NodeElement(subnodes, info) => containsNext(subnodes head)
-      case TerminalNodeElement(leaf, info, iter) => false
-      case _ => false
+    case EmptyRootNode(name, entries) => entries>0
+    case Node(subnodes, info) => containsNext(subnodes head)
+    case TerminalNode(leaf, info, iter) => iter.hasNext
+    case TerminalMultiLeafNode(_, _, iter) => iter.hasNext
+    case NodeElement(subnodes, info) => containsNext(subnodes head)
+    case TerminalNodeElement(leaf, info, iter) => false
+    case _ => false
   }
 
   /**

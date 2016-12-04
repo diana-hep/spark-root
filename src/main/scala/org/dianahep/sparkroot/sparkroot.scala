@@ -30,21 +30,18 @@ package object sparkroot {
   /**
    *  ROOT TTree Iterator
    *  - iterates over the tree
+   *  - pump the data from TTree into a spark Row
    */
   class RootTreeIterator(rootTree: TTree, requiredColumns: Array[String], filters: Array[Filter]) extends Iterator[Row] {
 
     //  Abstract Schema Tree
-    private val ast = {
-      buildAST(rootTree, null)
-    }
+    private val ast = buildAST(rootTree, null, requiredColumns)
 
     //  next exists
     def hasNext = containsNext(ast)
 
     //  get the next Row
-    def next() = {
-      buildSparkRow(ast)
-    }
+    def next() = buildSparkRow(ast)
   }
 
   /**
@@ -52,17 +49,20 @@ package object sparkroot {
    * 2. Maps execution of each file to a Tree iterator
    */
   class RootTableScan(path: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan with Logging{
-    //private val logger = Logger.getLogger("Spark-Root")
+    
+    // create the abstract tree
     private val ast: AbstractSchemaTree = 
     {
       //logger.info("Building the Abstract Schema Tree...")
       println("Building the Abstract Schema Tree...")
       val reader = new RootFileReader(new java.io.File(Seq(path) head))
-      val tmp = buildAST(findTree(reader.getTopDir), null) 
+      val tmp = buildAST(findTree(reader.getTopDir), null, null) 
       //logger.info("Done")
       println("Done")
       tmp
     }
+
+    // define the schema from the AST
     def schema: StructType = {
       //logger.info("Building the Spark Schema")
       println("Building the Spark Schema")
@@ -72,12 +72,13 @@ package object sparkroot {
       s
     }
 
+    // builds a scan
     def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-      //logger.info("Building Scan")
       println("Building Scan")
       println(requiredColumns.mkString(" "))
       println(filters)
-      // TODO: do a glob file pattern on the path and parallelize over all the names
+
+      // parallelize over all the files
       val r = sqlContext.sparkContext.parallelize(Seq(path), 1).
         flatMap({fileName =>
           // TODO: support HDFS (may involve changes to root4j)
@@ -87,7 +88,7 @@ package object sparkroot {
           // the real work starts here
           new RootTreeIterator(rootTree, requiredColumns, filters)
         })
-      //logger.info("Done building Scan")
+
       println("Done building Scan")
       r
     }
