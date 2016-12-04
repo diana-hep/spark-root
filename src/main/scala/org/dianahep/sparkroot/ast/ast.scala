@@ -25,13 +25,13 @@ package object ast
     override def toString = (name, title, className, myType).toString
   }
   class NodeElementInfo(override val name: String, override val title: String, 
-    override val className: String,
-    override val myType: SRType,
+    override val className: String, 
+    override val myType: SRType, val parentName: String,
     val streamerTypeCode: Int, val myTypeCode: Int, val objClassName: String) 
     extends NodeInfo(name, title, className, myType)
   {
-    override def toString = (name, title, className, myType, streamerTypeCode, 
-      myTypeCode, objClassName).toString
+    override def toString = (name, title, className, myType, parentName, 
+      streamerTypeCode,  myTypeCode, objClassName).toString
   }
 
   abstract class AbstractSchemaTree;
@@ -51,7 +51,7 @@ package object ast
   class LeafElement(override val info: LeafElementInfo) extends Leaf(info);
   case class TerminalNodeElement(leaf: LeafElement, info: NodeElementInfo,
     iter: BranchIterator[Any]) extends AbstractSchemaTree;
-  case class NodeElement(subnodes: Seq[AbstractSchemaTree], info: NodeInfo)
+  case class NodeElement(subnodes: Seq[AbstractSchemaTree], info: NodeElementInfo)
     extends AbstractSchemaTree;
 
   /**
@@ -88,6 +88,13 @@ package object ast
     )
     else assignLeafType(leaves.get(0).asInstanceOf[TLeaf])
   }
+
+  /*
+  def assignBranchElementType(branch: TBranchElement, 
+    streamerInfo: TStreamerInfo): SRType = 
+  {
+
+  }*/
   
   def assignLeafType(leaf: TLeaf): SRType = 
   {
@@ -149,12 +156,35 @@ package object ast
       if (subs.size>0)
       {
         //  complex node element
-        null
+        val mytype = SRNull;
+        new NodeElement(
+          for (i <- 0 until subs.size; sub=subs.get(i).asInstanceOf[TBranchElement])
+            yield synthesizeBranchElement(sub),
+          new NodeElementInfo(branchElement.getName, branchElement.getTitle,
+            branchElement.getRootClass.getClassName, mytype,
+            branchElement.getParentName,
+            branchElement.getStreamerType, branchElement.getType,
+            branchElement.getClassName
+          )
+        )
       }
       else
       {
-        // ssimple node element
-        null
+        // ssimple node element - assume there is only 1 leaf element for now
+        val leaf = branchElement.getLeaves.get(0).asInstanceOf[TLeafElement]
+        val mytype = SRNull;
+        new TerminalNodeElement(
+          new LeafElement(new LeafElementInfo(leaf.getName,
+            leaf.getRootClass.getClassName, leaf.getLen,
+            leaf.getType
+          )), 
+          new NodeElementInfo(branchElement.getName, branchElement.getTitle,
+            branchElement.getRootClass.getClassName, mytype,
+            branchElement.getParentName,
+            branchElement.getStreamerType, branchElement.getType,
+            branchElement.getClassName
+          ), null
+        )
       }
     }
 

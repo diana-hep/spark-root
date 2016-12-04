@@ -77,3 +77,28 @@ case class SRStructType(memberNamesTypes: Seq[(String, SRType)]) extends SRType
   )
   override def getIterator(branch: TBranch) = StructBranchIterator(branch)
 }
+
+/*
+ * Case Classes to represent the STL Collection Types
+ */
+/*case class SRSTLVector() extends SRType
+{
+  override def toSparkType: DataType
+  override def getIterator(branch: TBranch) = 
+}*/
+/*
+case class SRSTLList() extends SRType
+{
+  override def toSparkType: DataType
+  override def getIterator(branch: TBranch) = 
+}
+case class SRSTLDeque() extends SRType
+{
+  override def toSparkType: DataType
+  override def getIterator(branch: TBranch) = 
+}
+case class SRSTLMap() extends SRType
+{
+  override def toSparkType: DataType
+  override def getIterator(branch: TBranch) = 
+}*/

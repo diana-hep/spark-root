@@ -17,3 +17,8 @@ sparkComponents := Seq("sql")
 
 resolvers += Resolver.mavenLocal
 libraryDependencies += "org.diana-hep" % "root4j" % "0.1.2"
+
+// include the log4j
+libraryDependencies += "org.apache.logging.log4j" % "log4j-api" % "2.7"
+libraryDependencies += "org.apache.logging.log4j" % "log4j-core" % "2.7"
+libraryDependencies += "org.apache.logging.log4j" %% "log4j-api-scala" % "2.7"
