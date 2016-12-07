@@ -11,7 +11,7 @@ import org.apache.spark.sql.sources.PrunedFilteredScan
 import org.apache.spark.sql.sources.RelationProvider
 import org.apache.spark.sql.types._
 
-import org.apache.logging.log4j.scala.Logging
+//import org.apache.logging.log4j.scala.Logging
 
 import org.dianahep.root4j.core.RootInput
 import org.dianahep.root4j._
@@ -48,7 +48,7 @@ package object sparkroot {
    * 1. Builds the Schema
    * 2. Maps execution of each file to a Tree iterator
    */
-  class RootTableScan(path: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan with Logging{
+  class RootTableScan(path: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan{
     
     // create the abstract tree
     private val ast: AbstractSchemaTree = 
@@ -83,8 +83,9 @@ package object sparkroot {
         flatMap({fileName =>
           // TODO: support HDFS (may involve changes to root4j)
           val reader = new RootFileReader(new java.io.File(fileName))
-          // TODO: check for multiple trees in the file
-          val rootTree = findTree(reader.getTopDir)
+          // get the TTree
+          // TODO: we could add an option that specificies the TTree...
+          val rootTree = findTree(reader)
           // the real work starts here
           new RootTreeIterator(rootTree, requiredColumns, filters)
         })
