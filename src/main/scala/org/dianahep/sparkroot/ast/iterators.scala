@@ -55,12 +55,3 @@ case class BasicBranchIterator(branch: TBranch) extends BranchIterator[Any](bran
     data
   }
 }
-
-/*
- * BranchElement Iterator
- */
-case class BranchElementIterator(branch: TBranchElement) 
-  extends BranchIterator[Any](branch)
-{
-
-}

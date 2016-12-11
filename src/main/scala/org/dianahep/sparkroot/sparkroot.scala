@@ -32,16 +32,19 @@ package object sparkroot {
    *  - iterates over the tree
    *  - pump the data from TTree into a spark Row
    */
-  class RootTreeIterator(rootTree: TTree, requiredColumns: Array[String], filters: Array[Filter]) extends Iterator[Row] {
+  class RootTreeIterator(tree: TTree, // TTree
+    streamers: Map[String, TStreamerInfo], // a map of streamers
+    requiredColumns: Array[String], // columns that are required for a query
+    filters: Array[Filter]) extends Iterator[Row] {
 
     //  Abstract Schema Tree
-    private val ast = buildAST(rootTree, null, requiredColumns)
-
+//    private val ast = buildAST(rootTree, null, requiredColumns)
+    private val att = buildATT(tree, streamers, requiredColumns)
     //  next exists
-    def hasNext = containsNext(ast)
-
+//    def hasNext = containsNext(ast)
+    def hasNext = containsNext(att)
     //  get the next Row
-    def next() = buildSparkRow(ast)
+    def next() = readSparkRow(att)
   }
 
   /**
@@ -51,12 +54,14 @@ package object sparkroot {
   class RootTableScan(path: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan{
     
     // create the abstract tree
-    private val ast: AbstractSchemaTree = 
+//    private val ast: AbstractSchemaTree = 
+    private val att: core.SRType = 
     {
       //logger.info("Building the Abstract Schema Tree...")
       println("Building the Abstract Schema Tree...")
       val reader = new RootFileReader(new java.io.File(Seq(path) head))
-      val tmp = buildAST(findTree(reader.getTopDir), null, null) 
+//      val tmp = buildAST(findTree(reader.getTopDir), null, null) 
+      val tmp = buildATT(findTree(reader.getTopDir), arrangeStreamers(reader), null)
       //logger.info("Done")
       println("Done")
       tmp
@@ -66,7 +71,8 @@ package object sparkroot {
     def schema: StructType = {
       //logger.info("Building the Spark Schema")
       println("Building the Spark Schema")
-      val s = buildSparkSchema(ast)
+      val s = buildSparkSchema(att)
+//      val s = buildSparkSchema(ast)
       //logger.info("Done")
       println("Done")
       s
@@ -87,7 +93,8 @@ package object sparkroot {
           // TODO: we could add an option that specificies the TTree...
           val rootTree = findTree(reader)
           // the real work starts here
-          new RootTreeIterator(rootTree, requiredColumns, filters)
+          new RootTreeIterator(rootTree, arrangeStreamers(reader), 
+            requiredColumns, filters)
         })
 
       println("Done building Scan")

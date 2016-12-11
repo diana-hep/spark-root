@@ -2,11 +2,10 @@ package org.dianahep.sparkroot
 
 import org.dianahep.sparkroot.ast._
 import org.dianahep.root4j.interfaces._
+import org.dianahep.root4j.core._
 import org.dianahep.root4j._
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
-
-import java.util
 
 package object ast
 {
@@ -146,19 +145,368 @@ package object ast
     else assignLeafType(leaves.get(0).asInstanceOf[TLeaf])
   }
 
-  /*
-  def assignBranchElementType(branch: TBranchElement, 
-    streamerInfo: TStreamerInfo): SRType = 
-  {
-
-  }*/
-  
   def assignLeafType(leaf: TLeaf): SRType = 
   {
     if (leaf.getArrayDim>0) // array
       SRArrayType(assignLeafTypeByLeafClass(leaf), leaf.getArrayDim)
     else
       assignLeafTypeByLeafClass(leaf)
+  }
+
+  /**
+   * @return prints the Abstractly Typed Tree
+   */
+  def printATT(att: core.SRType, level: Int = 0, sep: String = "  "): Unit = att match {
+    case core.SRNull => println(sep*level+"Null")
+    case core.SRRoot(name, entries, types) => {
+      println(s"Root: $name wtih $entries Entries")
+      for (t <- types) printATT(t, level+1)
+    }
+    case core.SREmptyRoot(name, entries) =>
+      println(s"Empty Root: $name with $entries Entries")
+    case core.SRInt(name, _, _) => println(sep*level+s"$name: Integer")
+    case core.SRString(name, _, _) => println(sep*level+s"$name: String")
+    case core.SRLong(name, _, _) => println(sep*level+s"$name: Long")
+    case core.SRDouble(name, _, _) => println(sep*level+s"$name: Double")
+    case core.SRByte(name, _, _) => println(sep*level+s"$name: Byte")
+    case core.SRBoolean(name, _, _) => println(sep*level+s"$name: Boolean")
+    case core.SRFloat(name, _, _) => println(sep*level+s"$name: Float")
+    case core.SRArray(name, _, _, t, n) => {
+      println(sep*level + s"$name: Array[$n]")
+      printATT(t, level+1)
+    }
+    case core.SRVector(name, _, t, _, _) => {
+      println(sep*level + s"$name: STL Vector")
+      printATT(t, level+1)
+    }
+    case core.SRComposite(b, members, _) => {
+      println(sep*level + s"${b.getName}: Composite")
+      for (t <- members) printATT(t, level+1)
+    }
+    case _ => println("")
+  }
+
+  def buildSparkSchema(att: core.SRType) = att.toSparkType.asInstanceOf[StructType]
+  def readSparkRow(att: core.SRType): Row = att.read.asInstanceOf[Row]
+  def containsNext(att: core.SRType) = att.hasNext
+
+  /**
+   * Build ATT 
+   *
+   * @return ATT
+   */
+  def buildATT(
+    tree: TTree,
+    streamers: Map[String, TStreamerInfo],
+    requiredColumns: Array[String]): core.SRType = {
+
+    def synthesizeLeafType(b: TBranch, leaf: TLeaf): core.SRType = 
+      leaf.getRootClass.getClassName.last match {
+        case 'C' => core.SRString(leaf.getName, b, leaf)
+        case 'B' => core.SRByte(leaf.getName, b, leaf)
+        case 'b' => core.SRByte(leaf.getName, b, leaf)
+        case 'S' => core.SRShort(leaf.getName, b, leaf)
+        case 's' => core.SRShort(leaf.getName, b, leaf)
+        case 'I' => core.SRInt(leaf.getName, b, leaf)
+        case 'i' => core.SRInt(leaf.getName, b, leaf)
+        case 'F' => core.SRFloat(leaf.getName, b, leaf)
+        case 'D' => core.SRDouble(leaf.getName, b, leaf)
+        case 'L' => core.SRLong(leaf.getName, b, leaf)
+        case 'l' => core.SRLong(leaf.getName, b, leaf)
+        case 'O' => core.SRBoolean(leaf.getName, b, leaf)
+        case _ => core.SRNull
+    }
+
+    def synthesizeLeaf(b: TBranch, leaf: TLeaf): core.SRType = {
+      def iterate(dimsToGo: Int): core.SRType =
+        if (dimsToGo==1) core.SRArray(leaf.getName, b, leaf, synthesizeLeafType(b, leaf), 
+          leaf.getMaxIndex()(leaf.getArrayDim-1))
+        else
+          core.SRArray(leaf.getName, b, leaf, iterate(dimsToGo-1), leaf.getMaxIndex()(
+            leaf.getArrayDim-dimsToGo))
+
+      if (leaf.isInstanceOf[TLeafElement])
+        // leafElement
+        synthesizeLeafElement(b, leaf.asInstanceOf[TLeafElement])
+      else {
+        // leaf
+        if (leaf.getArrayDim==0)
+          synthesizeLeafType(b, leaf)
+        else
+          iterate(leaf.getArrayDim)
+      }
+    }
+
+    def synthesizeLeafElement(b: TBranch, leaf: TLeafElement): core.SRType = {
+      return core.SRNull;
+    }
+
+    /**
+     * top branch is special
+     */
+    def synthesizeTopBranch(b: TBranch): core.SRType = {
+      if (b.isInstanceOf[TBranchElement]) {
+        val be = b.asInstanceOf[TBranchElement]
+        val streamerInfo = streamers.applyOrElse(be.getClassName,
+          (x: String) => null)
+        if (streamerInfo==null) return core.SRNull
+
+        // top branch element starts by looking at the streamer info
+        synthesizeStreamerInfo(be, streamerInfo, core.SRRootType)
+      }
+      else { // simple TBranch case
+        val leaves = b.getLeaves
+        if (leaves.size>1) // multi leaf branch
+          new core.SRComposite(b, 
+            for (i <- 0 until leaves.size) yield synthesizeLeaf(b, 
+              leaves.get(i).asInstanceOf[TLeaf]), true)
+        else  // a single leaf branch
+          synthesizeLeaf(b, leaves.get(0).asInstanceOf[TLeaf])
+      }
+    }
+    
+    /*
+     * for the case when we have a basic type nested - 
+     * it doesn't need to have a name or branch...
+     */
+    def synthesizeBasicStreamerType(typeCode: Int): core.SRType = typeCode match {
+      case 1 => core.SRByte("", null, null)
+      case 2 => core.SRShort("", null, null)
+      case 3 => core.SRInt("", null, null)
+      case 4 => core.SRLong("", null, null)
+      case 5 => core.SRFloat("", null, null)
+      case 6 => core.SRInt("", null, null)
+      case 7 => core.SRString("", null, null)
+      case 8 => core.SRDouble("", null, null)
+      case 9 => core.SRFloat("", null, null)
+      case 10 => core.SRByte("", null, null)
+      case 11 => core.SRByte("", null, null)
+      case 12 => core.SRShort("", null, null)
+      case 13 => core.SRInt("", null, null)
+      case 14 => core.SRLong("", null, null)
+      case 15 => core.SRInt("", null, null)
+      case 16 => core.SRLong("", null, null)
+      case 17 => core.SRLong("", null, null)
+      case 18 => core.SRBoolean("", null, null)
+      case 19 => core.SRShort("", null, null)
+      case _ => core.SRNull
+    }
+
+    def synthesizeStreamerElement(
+      b: TBranchElement, 
+      streamerElement: TStreamerElement,
+      parentType: core.SRTypeTag
+      ): core.SRType = {
+
+      // when you have an array of something simple kOffsetL by ROOT convention  
+      def iterateArray(dimsToGo: Int): core.SRType = 
+        if (dimsToGo==1) core.SRArray(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement], 
+          synthesizeBasicStreamerType(streamerElement.getType-20),
+          streamerElement.getMaxIndex()(streamerElement.getArrayDim-1))
+      else
+        core.SRArray(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement], 
+          iterateArray(dimsToGo-1), streamerElement.getMaxIndex()(
+            streamerElement.getArrayDim-dimsToGo))
+
+      streamerElement.getType match {
+        case 0 => {
+          // assume for now that the inheritance is from composite classes
+          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
+          (x: String) => null)
+          if (streamerInfo==null) core.SRNull
+          else synthesizeStreamerInfo(b, streamerInfo, parentType)
+        }
+        case 1 => core.SRByte(streamerElement.getName, b, 
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 2 => core.SRShort(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 3 => core.SRInt(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 4 => core.SRLong(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 5 => core.SRFloat(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 6 => core.SRInt(streamerElement.getName, b, 
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 7 => core.SRString(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 8 => core.SRDouble(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 9 => core.SRFloat(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 10 => core.SRByte(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 11 => core.SRByte(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 12 => core.SRShort(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 13 => core.SRInt(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 14 => core.SRLong(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 15 => core.SRInt(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 16 => core.SRLong(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 17 => core.SRLong(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 18 => core.SRBoolean(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case 19 => core.SRShort(streamerElement.getName, b, 
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
+        case it if 21 until 40 contains it => iterateArray(streamerElement.getArrayDim)
+        case 61 => {
+          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
+          (x: String) => null)
+          if (streamerInfo==null) core.SRNull
+          else synthesizeStreamerInfo(b, streamerInfo, parentType)
+        }
+        case 62 => {
+          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
+            (x: String) => null)
+          if (streamerInfo==null) core.SRNull
+          else synthesizeStreamerInfo(b, streamerInfo, parentType)
+        }
+        case 500 => synthesizeStreamerSTL(b, streamerElement.asInstanceOf[TStreamerSTL],
+          parentType)
+        case _ => core.SRNull
+      }
+    }
+
+    def synthesizeStreamerSTL(
+      b: TBranchElement,
+      streamerSTL: TStreamerSTL,
+      parentType: core.SRTypeTag
+    ): core.SRType = {
+      val ctype = streamerSTL.getCtype
+
+      // this nested type identification is only for unsplitted for now
+      val t = 
+        if (ctype<61) synthesizeBasicStreamerType(ctype)
+        else {
+          val memberClassName = streamerSTL.getTypeName.slice(
+            streamerSTL.getTypeName.indexOf('<')+1, streamerSTL.getTypeName.length-1).trim
+          val streamerInfo = streamers.applyOrElse(memberClassName, (x: String) => null)
+          if (streamerInfo==null) core.SRNull
+          // synthesize the streamer Info of the member of the current Collection
+          else synthesizeStreamerInfo(null, streamerInfo, core.SRCollectionType)
+        }
+      streamerSTL.getSTLtype match {
+        case 1 => 
+          if (b==null) 
+            // nested vector or a vector does not have a separate branch
+            parentType match {
+              // this is not the top collection
+              case core.SRCollectionType => core.SRVector("", b, t ,false, false)
+              // this is the top collection
+              case _ => core.SRVector(streamerSTL.getName, b, t, false, true)
+            }
+          else
+            parentType match {
+              case core.SRCollectionType => core.SRVector(b.getName, b, t, false, false)
+              case _ => core.SRVector(b.getName, b, t, false, true)
+            }
+        case _ => core.SRNull
+      }
+    }
+
+    def synthesizeStreamerInfo(
+      b: TBranchElement, 
+      streamerInfo: TStreamerInfo,
+      parentType: core.SRTypeTag
+    ) = {
+      val elements = streamerInfo.getElements
+      if (elements.size==0) // that is some empty class
+        core.SRNull
+      else if (elements.get(0).asInstanceOf[TStreamerElement].getName=="This") 
+        synthesizeStreamerElement(b, elements.get(0).asInstanceOf[TStreamerElement],
+          parentType)
+      else {
+        if (b==null)
+          core.SRComposite(null,
+            for (i <- 0 until elements.size)
+              yield synthesizeStreamerElement(null,
+                elements.get(i).asInstanceOf[TStreamerElement], core.SRCompositeType),
+            false
+          )
+        else if (b.getBranches.size==0)
+          // unsplittable branch
+          // members do not need the branch for reading
+          // buffer will be passed to them
+          core.SRComposite(b,
+            for (i <- 0 until elements.size) 
+              yield synthesizeStreamerElement(null, 
+                elements.get(i).asInstanceOf[TStreamerElement], core.SRCompositeType),
+            false
+          )
+        else 
+          // splittable
+          // subs have id to map to the streamerElement 
+          core.SRComposite(
+            b,
+            for (i <- 0 until b.getBranches.size; 
+              sub=b.getBranches.get(i).asInstanceOf[TBranchElement])
+              yield synthesizeStreamerElement(sub, 
+              elements.get(sub.getID).asInstanceOf[TStreamerElement], core.SRCompositeType),
+            true
+          )
+      }
+    }
+
+    /**
+     * Map the branch => SRType
+     */
+    def synthesizeBranchElement(b: TBranchElement, // top branch or sub
+      streamerElement: TStreamerElement, // streamer Element for a subbranch
+      parentType: core.SRTypeTag
+      ): core.SRType = {
+      val subs = b.getBranches
+      if (streamerElement==null) {
+        // top branch
+        core.SRNull // should not be the case
+      }
+      else synthesizeStreamerElement(b, streamerElement, parentType)
+    }
+
+    requiredColumns match {
+      // for the initialization stage - all the columns to be mapped
+      case null => new core.SRRoot(tree.getName,
+        tree.getEntries,
+        for (i <- 0 until tree.getNBranches; b=tree.getBranch(i))
+          yield synthesizeTopBranch(b)
+      )
+      // for the cases like count.... 
+      case Array() => new core.SREmptyRoot(tree.getName, tree.getEntries)
+      // for the non-empty list of columns that are required by for a query
+      case _ => new core.SRRoot(tree.getName, tree.getEntries,
+        for (i <- 0 until tree.getNBranches; b=tree.getBranch(i) 
+          if requiredColumns.contains(b.getName()))
+          yield synthesizeTopBranch(b)
+      )
+    }
   }
 
   /**
@@ -557,7 +905,7 @@ package object ast
   def findTree(dir: TDirectory): TTree = // find the Tree
   {
     for (i <- 0 until dir.nKeys) {
-      val obj = dir.getKey(i).getObject.asInstanceOf[core.AbstractRootObject]
+      val obj = dir.getKey(i).getObject.asInstanceOf[AbstractRootObject]
       if (obj.getRootClass.getClassName == "TDirectory" ||
         obj.getRootClass.getClassName == "TTree") 
       {
