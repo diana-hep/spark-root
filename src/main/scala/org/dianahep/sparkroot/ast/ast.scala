@@ -179,8 +179,15 @@ package object ast
       println(sep*level + s"$name: STL Vector")
       printATT(t, level+1)
     }
-    case core.SRComposite(b, members, _) => {
-      println(sep*level + s"${b.getName}: Composite")
+    case core.SRMap(name, _, keyType, valueType, _, _) => {
+      println(sep*level + s"$name: Map ${keyType.name} => ${valueType.name}")
+      println(sep*(level+1) + "Key Type:")
+      printATT(keyType, level+2)
+      println(sep*(level+1) + "Value Type:")
+      printATT(valueType, level+2)
+    }
+    case core.SRComposite(name, b, members, _, _) => {
+      println(sep*level + s"${name}: Composite")
       for (t <- members) printATT(t, level+1)
     }
     case _ => println("")
@@ -198,7 +205,9 @@ package object ast
   def buildATT(
     tree: TTree,
     streamers: Map[String, TStreamerInfo],
-    requiredColumns: Array[String]): core.SRType = {
+    requiredColumns: Array[String],
+    debug: Int = 0 // 0 for no debug messages printed
+  ): core.SRType = {
 
     def synthesizeLeafType(b: TBranch, leaf: TLeaf): core.SRType = 
       leaf.getRootClass.getClassName.last match {
@@ -252,14 +261,14 @@ package object ast
         if (streamerInfo==null) return core.SRNull
 
         // top branch element starts by looking at the streamer info
-        synthesizeStreamerInfo(be, streamerInfo, core.SRRootType)
+        synthesizeStreamerInfo(be, streamerInfo, null, core.SRRootType)
       }
       else { // simple TBranch case
         val leaves = b.getLeaves
         if (leaves.size>1) // multi leaf branch
-          new core.SRComposite(b, 
+          new core.SRComposite(b.getName, b, 
             for (i <- 0 until leaves.size) yield synthesizeLeaf(b, 
-              leaves.get(i).asInstanceOf[TLeaf]), true)
+              leaves.get(i).asInstanceOf[TLeaf]), true, true)
         else  // a single leaf branch
           synthesizeLeaf(b, leaves.get(0).asInstanceOf[TLeaf])
       }
@@ -313,12 +322,21 @@ package object ast
             streamerElement.getArrayDim-dimsToGo))
 
       streamerElement.getType match {
-        case 0 => {
+        case 0 => { // BASE CLASS
           // assume for now that the inheritance is from composite classes
-          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
+          val streamerInfo = streamers.applyOrElse(streamerElement.getTypeName,
           (x: String) => null)
           if (streamerInfo==null) core.SRNull
-          else synthesizeStreamerInfo(b, streamerInfo, parentType)
+          else {
+            // in principle there must be the TStreamerInfo for all the bases 
+            // used
+            if (streamerInfo.getElements.size==0) 
+              // empty BASE CLASS, create an empty composite
+              // splitting does not matter - it's empty
+              core.SRComposite(streamerElement.getName, b, Seq(), false, false)
+            else
+              synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
+          }
         }
         case 1 => core.SRByte(streamerElement.getName, b, 
           if (b==null) null
@@ -379,16 +397,16 @@ package object ast
           else b.getLeaves.get(0).asInstanceOf[TLeafElement])
         case it if 21 until 40 contains it => iterateArray(streamerElement.getArrayDim)
         case 61 => {
-          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
+          val streamerInfo = streamers.applyOrElse(streamerElement.getTypeName,
           (x: String) => null)
           if (streamerInfo==null) core.SRNull
-          else synthesizeStreamerInfo(b, streamerInfo, parentType)
+          else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
         }
         case 62 => {
-          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
+          val streamerInfo = streamers.applyOrElse(streamerElement.getTypeName,
             (x: String) => null)
           if (streamerInfo==null) core.SRNull
-          else synthesizeStreamerInfo(b, streamerInfo, parentType)
+          else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
         }
         case 500 => synthesizeStreamerSTL(b, streamerElement.asInstanceOf[TStreamerSTL],
           parentType)
@@ -396,26 +414,297 @@ package object ast
       }
     }
 
+    /**
+     * @return the full type definition for a basic type
+     *
+     * Array is also a basic type - leave it out for now
+     */
+    def synthesizeBasicTypeName(
+      typeName: String // basic type name
+    ): core.SRType = {
+
+      typeName match {
+        case "int" => core.SRInt("", null, null)
+        case "float" => core.SRFloat("", null, null)
+        case "double" => core.SRDouble("", null, null)
+        case "char" => core.SRByte("", null, null)
+        case "long" => core.SRLong("", null, null)
+        case "short" => core.SRShort("", null, null)
+        case "bool" => core.SRBoolean("", null, null)
+        case "unsigned int" => core.SRInt("", null, null)
+        case "unsigned char" => core.SRByte("", null, null)
+        case "unsigned long" => core.SRLong("", null, null)
+        case "unsigned short" => core.SRShort("", null, null)
+
+        // ROOT ones ending with t
+        case "Double32_t" => core.SRFloat("", null, null)
+        case _ => core.SRNull
+      }
+    }
+
+    /**
+     * @return the full type definition from known types
+     * 
+     *
+     * assume that this type is already contained in something that is of STL type.
+     * That is because if it's inside of some class, there will be TStreamerElement 
+     * for it, otherwise not...
+     *
+     * assume for now that this is one of the following:
+     * 1) STL Collection
+     * 2) std::array ???
+     * 3) pair<T, U>
+     *
+     * we basically assume that if something is not present, it must be something of STL
+     */
+    def synthesizeClassName(
+      className: String, // c++ standard class type declaration (w/ spaces for templ.)
+      b: TBranchElement, // if the branch is split, we still need it
+      parentType: core.SRTypeTag // the tag for what our parent is
+    ): core.SRType = {
+      val stlLinear = Seq("vector", "list", "deque", "set", "multiset",
+        "forward_list", "unordered_set", "unordered_multiset")
+      val stlAssociative = Seq("map", "unordered_map", "multimap", "unordered_multimap")
+      val stlPair = "pair"
+      
+      // quickly parse the class type and template argumetns
+      val classTypeRE = "(.*?)<(.*?)>".r
+      if (debug>0) println(s"classType being synthesized: ${className} ${className.trim.length} ${className.length}")
+      val (classTypeString, argumentsTypeString) = className match {
+        case classTypeRE(aaa,bbb) => (aaa,bbb.trim)
+        case _ => (null, null)
+      }
+//      val classTypeString = className.slice(0, className.indexOf('<'))
+//      val argumentsTypeString = className.slice(className.indexOf('<')+1,
+//        className.length-1).trim
+
+      if (debug>0) println(s"Parsed classType=$classTypeString and argumentsType=$argumentsTypeString")
+
+      // if parsing is unsuccessful, assign null
+      if (classTypeString == null || argumentsTypeString == null)
+        return core.SRNull
+
+      // based on the class type name
+      classTypeString match {
+        case it if stlLinear contains it => {
+          // we have something that is vector like
+          // arguments must be a single typename
+          // 1. check if it's a basic type name
+          val streamerInfo = streamers.applyOrElse(argumentsTypeString,
+            (x: String) => null)
+          val valueType = 
+            if (streamerInfo == null) {
+              // no streamer info
+              // is basic type
+              // else synthesize the name again
+              val basicType = synthesizeBasicTypeName(argumentsTypeString)
+              if (basicType == core.SRNull)
+                // not a basic type
+                synthesizeClassName(argumentsTypeString, null,
+                  core.SRCollectionType) 
+              else basicType
+            }
+            else {
+              // there is a TStreamerInfo
+              synthesizeStreamerInfo(null, streamerInfo, null,
+                core.SRCollectionType)
+            }
+
+          // TODO: we need to do each collection separately???
+          // that is only the case when we have version for each STL separately read in
+          if (b==null) 
+            parentType match {
+              // this is not the top collection
+              case core.SRCollectionType => core.SRVector("", b, valueType,false, false)
+              // this is the top collection
+              case _ => core.SRVector("", b, valueType, false, true)
+            }
+          else
+            parentType match {
+              case core.SRCollectionType => core.SRVector(b.getName, b, valueType, false, false)
+              // if there are multiple sub branches of this guy - it's split
+              case _ => core.SRVector(b.getName, b, valueType,
+                if (b.getBranches.size==0) false else true, true)
+            }
+        }
+        case it if stlAssociative contains it => {
+          // we have something that is map like
+          // extract the key/value type names
+          println(s"Synthesizing the current class arguments: ${classTypeString}")
+          val mapTemplateRE = "(.*?),(.*?)".r
+          val (keyTypeString, valueTypeString) = argumentsTypeString match {
+            case mapTemplateRE(aaa,bbb) => (aaa,bbb)
+            case _ => (null, null)
+          }
+
+          // if there is a matching issue - assign null
+          if (keyTypeString==null || valueTypeString==null) return core.SRNull
+
+          // key type is a basic type - assumed for now.
+          val keyType = 
+            if (synthesizeBasicTypeName(keyTypeString) == core.SRNull)
+              // no our key is not a basic type.... for now put null
+              core.SRNull
+            else
+              synthesizeBasicTypeName(keyTypeString)
+
+          // value type
+          val streamerInfo = streamers.applyOrElse(valueTypeString,
+            (x: String) => null)
+          val valueType =
+            if (streamerInfo == null) {
+              // no streamer info
+              // is basic type
+              // else synthesize the name again
+              val basicType = synthesizeBasicTypeName(valueTypeString)
+              if (basicType == core.SRNull)
+                // not a basic type
+                synthesizeClassName(valueTypeString, null,
+                  core.SRCollectionType) 
+              else basicType
+            }
+            else {
+              // there is a TStreamerInfo
+              synthesizeStreamerInfo(null, streamerInfo, null,
+                core.SRCollectionType)
+            }
+
+          // TODO: we need to do each collection separately???
+          // that is only the case when we have version for each STL separately read in
+          if (b==null) 
+            parentType match {
+              // this is not the top collection
+              case core.SRCollectionType => new core.SRMap("", b, keyType,
+                valueType, false, false)
+              // this is the top collection
+              case _ => new core.SRMap("", b, keyType, valueType, false, true)
+            }
+          else
+            parentType match {
+              case core.SRCollectionType => new core.SRMap(b.getName, b, keyType,
+                valueType, false, false)
+              // if there are multiple sub branches of this guy - it's split
+              case _ => new core.SRMap(b.getName, b, keyType, valueType,
+                if (b.getBranches.size==0) false else true, true)
+            }
+        }
+        case it if it == stlPair => {
+          // pair is considered to be the composite
+          val pairTemplateRE = "(.*?),(.*?)".r
+          val (firstTypeString, secondTypeString) = argumentsTypeString match {
+            case pairTemplateRE(aaa,bbb) => (aaa,bbb)
+            case _ => (null, null)
+          }
+
+          if (debug>0) println(s"We got a pair: first=$firstTypeString second=$secondTypeString")
+
+          // if there is a matching issue - assign null
+          if (firstTypeString==null || secondTypeString==null) return core.SRNull
+
+          //  streamer info for first/second
+          val streamerInfoFirst = streamers.applyOrElse(firstTypeString,
+            (x: String) => null)
+          val streamerInfoSecond = streamers.applyOrElse(secondTypeString,
+            (x: String) => null)
+
+          // get the type for first
+          val firstType =
+            if (streamerInfoFirst == null) {
+              // no streamer info
+              // is basic type
+              // else synthesize the name again
+              val basicType = synthesizeBasicTypeName(firstTypeString)
+              if (basicType == core.SRNull)
+                // not a basic type
+                synthesizeClassName(firstTypeString, null,
+                  core.SRCompositeType) 
+              else basicType
+            }
+            else {
+              // there is a TStreamerInfo
+              synthesizeStreamerInfo(null, streamerInfoFirst, null,
+                core.SRCompositeType)
+            }
+
+          // get the type for second
+          val secondType =
+            if (streamerInfoSecond == null) {
+              // no streamer info
+              // is basic type
+              // else synthesize the name again
+              val basicType = synthesizeBasicTypeName(secondTypeString)
+              if (basicType == core.SRNull)
+                // not a basic type
+                synthesizeClassName(secondTypeString, null,
+                  core.SRCompositeType) 
+              else basicType
+            }
+            else {
+              // there is a TStreamerInfo
+              synthesizeStreamerInfo(null, streamerInfoSecond, null,
+                core.SRCompositeType)
+            }
+
+          // TODO: Do we need a special type for pair???
+          // TODO: Can pair be split???
+          if (b==null) 
+            parentType match {
+              // this is not the top collection
+              case core.SRCollectionType => core.SRComposite("",
+                b, Seq(firstType, secondType), false, false)
+              // this is the top collection
+              case _ => core.SRComposite("", b, Seq(firstType, secondType), false, false)
+            }
+          else
+            parentType match {
+              case core.SRCollectionType => core.SRComposite(b.getName, b,
+                Seq(firstType, secondType), false)
+              // if there are multiple sub branches of this guy - it's split
+              case _ => core.SRComposite(b.getName, b, Seq(firstType, secondType), false)
+            }
+        }
+        case _ => core.SRNull
+      }
+    }
+
+    /**
+     * @return the SparkROOT type for the STL collection
+     */
     def synthesizeStreamerSTL(
       b: TBranchElement,
       streamerSTL: TStreamerSTL,
       parentType: core.SRTypeTag
     ): core.SRType = {
-      val ctype = streamerSTL.getCtype
+      // debugging...
+      if (debug>0) println(s"TStreamer STL for type: ${streamerSTL.getTypeName}")
 
-      // this nested type identification is only for unsplitted for now
-      val t = 
-        if (ctype<61) synthesizeBasicStreamerType(ctype)
-        else {
-          val memberClassName = streamerSTL.getTypeName.slice(
-            streamerSTL.getTypeName.indexOf('<')+1, streamerSTL.getTypeName.length-1).trim
-          val streamerInfo = streamers.applyOrElse(memberClassName, (x: String) => null)
-          if (streamerInfo==null) core.SRNull
-          // synthesize the streamer Info of the member of the current Collection
-          else synthesizeStreamerInfo(null, streamerInfo, core.SRCollectionType)
-        }
+      // parse by the stl type
       streamerSTL.getSTLtype match {
-        case 1 => 
+        case 1 => { // std::vector
+
+          // probe the member type
+          val ctype = streamerSTL.getCtype
+          val t = 
+            if (ctype<61) synthesizeBasicStreamerType(ctype)
+            else {
+              val memberClassName = streamerSTL.getTypeName.slice(
+                streamerSTL.getTypeName.
+                indexOf('<')+1, streamerSTL.getTypeName.length-1).trim
+              val streamerInfo = streamers.applyOrElse(memberClassName, 
+                (x: String) => null)
+
+
+              if (streamerInfo==null) 
+                // no streamer info - type may be(must be) an STL collection
+                // right away - for nested STL no splitting!
+                synthesizeClassName(memberClassName, null, core.SRCollectionType)
+              else synthesizeStreamerInfo(
+                if (b.getBranches.size==0) null
+                else b
+                , streamerInfo, 
+                null, core.SRCollectionType)
+            }
+
           if (b==null) 
             // nested vector or a vector does not have a separate branch
             parentType match {
@@ -427,8 +716,73 @@ package object ast
           else
             parentType match {
               case core.SRCollectionType => core.SRVector(b.getName, b, t, false, false)
-              case _ => core.SRVector(b.getName, b, t, false, true)
+              // if there are multiple sub branches of this guy - it's split
+              case _ => core.SRVector(b.getName, b, t,
+                if (b.getBranches.size==0) false else true, true)
             }
+        }
+        case 4 => { // std::map
+
+          // probe the key/value types
+          val keyValueTypeNames = streamerSTL.getTypeName.slice(
+            streamerSTL.getTypeName.indexOf('<')+1, streamerSTL.getTypeName.length-1)
+
+          if (debug>0) println(s"KeyValueTypeNames: ${keyValueTypeNames}")
+          // check if the pair of <key_type, value_type> is present in TStreamerInfo
+          val streamerInfo = streamers.applyOrElse(s"pair<${keyValueTypeNames}>",
+            (x: String) => null)
+          if (streamerInfo != null) {
+            // there is a streamer info for the pair
+            // extract it and use that to identify the member type
+            val keyValueTypes = synthesizeStreamerInfo(
+              if (b.getBranches.size==0) null
+              else b,
+              streamerInfo, null, core.SRCollectionType).asInstanceOf[core.SRComposite]
+
+            // create a map
+            if (b==null)
+              // nested vector or a vector does not have a separate branch
+              parentType match {
+                // this is not the Top Level Collection
+                case core.SRCollectionType => new core.SRMap("",b,keyValueTypes,
+                  false, false)
+                // this is the top level collection
+                case _ => new core.SRMap(streamerSTL.getName, b, keyValueTypes, false, true)
+              }
+            else 
+              parentType match {
+                case core.SRCollectionType => new core.SRMap(b.getName, b, keyValueTypes,
+                  false, false)
+                case _ => new core.SRMap(b.getName, b, keyValueTypes, 
+                  if (b.getBranches.size==0) false else true, true)
+              }
+          }
+          else {
+            // pair<keytype, valuetype> is not in the TStreamerInfo
+            // we build the pair ourselves and send it to be synthesized by
+            // class name... TODO: Is extracting the key/value types explicitly better?
+            val keyValueTypes = synthesizeClassName(
+              // note the keyValueTypeNames has not been trimmed - c++ standard type
+              s"pair<${keyValueTypeNames}>", b, core.SRCollectionType
+            ).asInstanceOf[core.SRComposite]
+            // create a map
+            if (b==null)
+              // nested vector or a vector does not have a separate branch
+              parentType match {
+                // this is not the Top Level Collection
+                case core.SRCollectionType => new core.SRMap("",b,keyValueTypes,
+                  false, false)
+                // this is the top level collection
+                case _ => new core.SRMap(streamerSTL.getName, b, keyValueTypes, false, true)
+              }
+            else parentType match {
+              case core.SRCollectionType => new core.SRMap(b.getName, b, keyValueTypes,
+                false, false)
+              case _ => new core.SRMap(b.getName, b, keyValueTypes, 
+                if (b.getBranches.size==0) false else true, true)
+            }
+          }
+        }
         case _ => core.SRNull
       }
     }
@@ -436,6 +790,7 @@ package object ast
     def synthesizeStreamerInfo(
       b: TBranchElement, 
       streamerInfo: TStreamerInfo,
+      streamerElement: TStreamerElement, 
       parentType: core.SRTypeTag
     ) = {
       val elements = streamerInfo.getElements
@@ -446,7 +801,9 @@ package object ast
           parentType)
       else {
         if (b==null)
-          core.SRComposite(null,
+          core.SRComposite(
+            if (streamerElement==null) "" else streamerElement.getName
+            , null,
             for (i <- 0 until elements.size)
               yield synthesizeStreamerElement(null,
                 elements.get(i).asInstanceOf[TStreamerElement], core.SRCompositeType),
@@ -456,7 +813,7 @@ package object ast
           // unsplittable branch
           // members do not need the branch for reading
           // buffer will be passed to them
-          core.SRComposite(b,
+          core.SRComposite(b.getName, b,
             for (i <- 0 until elements.size) 
               yield synthesizeStreamerElement(null, 
                 elements.get(i).asInstanceOf[TStreamerElement], core.SRCompositeType),
@@ -466,7 +823,7 @@ package object ast
           // splittable
           // subs have id to map to the streamerElement 
           core.SRComposite(
-            b,
+            b.getName, b,
             for (i <- 0 until b.getBranches.size; 
               sub=b.getBranches.get(i).asInstanceOf[TBranchElement])
               yield synthesizeStreamerElement(sub, 
