@@ -23,6 +23,10 @@ abstract class SRType(val name: String) {
   def read(b: RootInput): Any
   // use you own buffer
   def read: Any
+  // force to read an array of this - use your own buffer
+  def readArray(size: Int): Seq[Any]
+  // force to read an array of this - reuse the buffer given
+  def readArray(buffer: RootInput, size: Int): Seq[Any]
   // for iteration
   def hasNext: Boolean
   // to convert to spark
@@ -39,6 +43,9 @@ abstract class SRCollection(name: String, isTop: Boolean) extends SRType(name) {
 case object SRNull extends SRType("Null") {
   override def read(b: RootInput) = null
   override def read = null
+  override def readArray(size: Int) = for (i <- 0 until size) yield null
+  override def readArray(buffer: RootInput, size: Int) = 
+    for (i <- 0 until size) yield null
   override def hasNext = false
   override val toSparkType = NullType
 }
@@ -46,9 +53,11 @@ case object SRNull extends SRType("Null") {
 case class SRRoot(override val name: String, var entries: Long, types: Seq[SRType]) extends SRType(name) {
   override def read(b: RootInput) = null
   override def read = {
-    entries-=1;
+    entries-=1L;
     Row.fromSeq(for (t <- types) yield t.read)
   }
+  override def readArray(buffer: RootInput, size: Int) = null
+  override def readArray(size: Int) = null
   override def hasNext = entries>0
 
   override val toSparkType = StructType(
@@ -59,8 +68,10 @@ case class SREmptyRoot(override val name: String, var entries: Long)
   extends SRType(name) {
   override def read(b: RootInput) = null
   override def read = {
-    entries-=1;Row()
+    entries-=1L;Row()
   }
+  override def readArray(b: RootInput, size: Int) = null
+  override def readArray(size: Int) = null
   override def hasNext = entries>0
   override val toSparkType = StructType(Seq())
 }
@@ -71,6 +82,16 @@ case class SRString(override val name: String, b: TBranch, l: TLeaf)
   override def read = {
     val buffer = b.setPosition(l, entry)
     val data = buffer.readString
+    entry+=1L
+    data
+  }
+  override def readArray(buffer: RootInput, size: Int) = {
+    entry+=1L;
+    for (i <- 0 until size) yield buffer.readString
+  }
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(l, entry)
+    val data = for (i <- 0 until size) yield buffer.readString
     entry+=1L
     data
   }
@@ -87,6 +108,16 @@ case class SRShort(override val name: String, b: TBranch, l: TLeaf)
     entry+=1L
     data
   }
+  override def readArray(buffer: RootInput, size: Int) = {
+    entry+=1L
+    for (i <- 0 until size) yield buffer.readShort
+  }
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(l, entry)
+    val data = for (i <- 0 until size) yield buffer.readShort
+    entry+=1L
+    data
+  }
   override def hasNext = entry<b.getEntries
   override val toSparkType = ShortType
 }
@@ -97,6 +128,16 @@ case class SRBoolean(override val name: String, b: TBranch, l: TLeaf)
   override def read = {
     val buffer = b.setPosition(l, entry)
     val data = buffer.readBoolean
+    entry+=1L
+    data
+  }
+  override def readArray(buffer: RootInput, size: Int) = {
+    entry+=1L
+    for (i <- 0 until size) yield buffer.readBoolean
+  }
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(l, entry)
+    val data = for (i <- 0 until size) yield buffer.readBoolean
     entry+=1L
     data
   }
@@ -113,6 +154,16 @@ case class SRLong(override val name: String, b: TBranch, l: TLeaf)
     entry+=1L
     data
   }
+  override def readArray(buffer: RootInput, size: Int) = {
+    entry+=1L
+    for (i <- 0 until size) yield buffer.readLong
+  }
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(l, entry)
+    val data = for (i <- 0 until size) yield buffer.readLong
+    entry+=1L
+    data
+  }
   override def hasNext = entry<b.getEntries
   override val toSparkType = LongType
 }
@@ -123,6 +174,16 @@ case class SRDouble(override val name: String, b: TBranch, l: TLeaf)
   override def read = {
     val buffer = b.setPosition(l, entry)
     val data = buffer.readDouble
+    entry+=1L
+    data
+  }
+  override def readArray(buffer: RootInput, size: Int) = {
+    entry+=1L
+    for (i <- 0 until size) yield buffer.readDouble
+  }
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(l, entry)
+    val data = for (i <- 0 until size) yield buffer.readDouble
     entry+=1L
     data
   }
@@ -139,6 +200,16 @@ case class SRByte(override val name: String, b: TBranch, l: TLeaf)
     entry+=1L
     data
   }
+  override def readArray(buffer: RootInput, size: Int) = {
+    entry+=1L
+    for (i <- 0 until size) yield buffer.readByte
+  }
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(l, entry)
+    val data = for (i <- 0 until size) yield buffer.readByte
+    entry+=1L
+    data
+  }
   override def hasNext = entry<b.getEntries
   override val toSparkType = ByteType
 }
@@ -152,6 +223,16 @@ case class SRInt(override val name: String, b: TBranch, l: TLeaf)
     entry+=1L
     data
   }
+  override def readArray(buffer: RootInput, size: Int) = {
+    entry+=1L
+    for (i <- 0 until size) yield buffer.readInt
+  }
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(l, entry)
+    val data = for (i <- 0 until size) yield buffer.readInt
+    entry+=1L
+    data
+  }
   override def hasNext = entry<b.getEntries
   override val toSparkType = IntegerType
 }
@@ -161,6 +242,16 @@ case class SRFloat(override val name: String, b: TBranch, l: TLeaf)
   override def read = {
     val buffer = b.setPosition(l, entry)
     val data = buffer.readFloat
+    entry+=1L
+    data
+  }
+  override def readArray(buffer: RootInput, size: Int) = {
+    entry+=1L
+    for (i <- 0 until size) yield buffer.readFloat
+  }
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(l, entry)
+    val data = for (i <- 0 until size) yield buffer.readFloat
     entry+=1L
     data
   }
@@ -190,54 +281,102 @@ case class SRArray(override val name: String, b: TBranch, l:TLeaf, t: SRType, n:
     entry+=1L
     data
   }
+
+  /**
+   * request explicitly to read the array of the Array Type
+   * @return Seq[Array]
+   */
+  override def readArray(buffer: RootInput, size: Int) = {
+    val data = for (i <- 0 until size) yield {
+      if (n == -1)
+        for (j <- 0 until l.getLeafCount.getWrappedValue(entry).asInstanceOf[Integer])
+          yield t.read(buffer)
+      else for (j <- 0 until n) yield t.read(buffer)
+    }
+    entry += 1L
+    data
+  }
+  
+  /**
+   * request explicitly to read the array of the Array Type
+   * @return Seq[Array]
+   */
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(l, entry)
+    val data = for (i <- 0 until size) yield {
+      if (n == -1)
+        for (j <- 0 until l.getLeafCount.getWrappedValue(entry).asInstanceOf[Integer])
+          yield t.read(buffer)
+      else for (j <- 0 until n) yield t.read(buffer)
+    }
+    entry+=1L
+    data
+  }
   override def hasNext = entry<b.getEntries
   override val toSparkType = ArrayType(t.toSparkType)
 }
 
-/*
-case class SRMap(override val name: String, b: TBranchElement,
-keyType: SRType, valueType: SRType, split: Boolean, isTop: Boolean) 
-extends SRCollection(name, isTop) {
-  // aux constructor where key is the members(0) and members(1) is the value
-  def this(name: String, b: TBranchElement, types: SRComposite, split: Boolean,
-    isTop: Boolean) = this(name, b, types.members(0), types.members(1), split, isTop)
-
-  override def read = 
-    if (split) {
-      null
-    }
-    else {
-      // collection is not split and we assign the buffer =>
-      // we are the top level of collection nestedness 
-      // 1. assign the buffer
-      val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeaf], entry)
-      // 2. read version and checksum - Short and Int
-      buffer.readShort; buffer.readInt
-      val size = buffer.readInt
-      (for (i <- 0 until size) yield (keyType.read(buffer), valueType.read(buffer))).toMap
+/**
+ * STL String Representation - has a header(byteCount, version).
+ * also different for array reading
+ */
+case class SRSTLString(override val name: String, 
+  b: TBranch,  // branch
+  isTop: Boolean) // is it nested inside some other collection? 
+  extends SRCollection(name, isTop) {
+  override def read(buffer: RootInput) = {
+    entry+=1L;
+    // read the byte count and version
+    // only if this guy is not nested into a collection himself
+    if (isTop) {
+      buffer.readInt
+      buffer.readShort
     }
 
-  override def read(buffer: RootInput) = 
-    if (split) {
-      null
-    }
-    else {
-      // map collection inside of something as the buffer has been passed
-      // for the top level of nestedness read the version
-      // 1. read the size
-      // 2. pass the buffer downstream for reading. 
-      if (isTop) { buffer.readShort; buffer.readInt}
-      val size = buffer.readInt
-      (for (i <- 0 until size) yield (keyType.read(buffer), valueType.read(buffer))).toMap
+    // read the data now
+    buffer.readString
+  }
+  override def read = {
+    val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
+    // read the byte count and version
+    // only if this guy is not nested in another collection, however
+    // isTop must be true in here!
+    if (isTop) {
+      buffer.readInt
+      buffer.readShort
     }
 
+    // read the data
+    val data = buffer.readString
+    entry+=1L
+    data
+  }
+  override def readArray(buffer: RootInput, size: Int) = {
+    entry+=1L;
+    // read tehe byte count and version first
+    buffer.readInt
+    buffer.readShort
+
+    // read the array of these strings
+    for (i <- 0 until size) yield buffer.readString
+  }
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
+    // reat the byte count and version first
+    buffer.readInt; buffer.readShort
+
+    // read array of strings
+    val data = for (i <- 0 until size) yield buffer.readString
+    entry+=1L
+    data
+  }
   override def hasNext = entry<b.getEntries
-  override val toSparkType = MapType(keyType.toSparkType, valueType.toSparkType)
+  override val toSparkType = StringType
 }
-*/
 
 /**
  * STL Vector Representation
+ * TODO: Do we have MemberWise Streaming for a map???
  */
 case class SRMap(
   override val name: String, // actual name if branch is null
@@ -250,6 +389,43 @@ case class SRMap(
   // aux constructor where key is the members(0) and members(1) is the value
   def this(name: String, b: TBranchElement, types: SRComposite, split: Boolean,
     isTop: Boolean) = this(name, b, types.members(0), types.members(1), split, isTop)
+
+  /**
+   * explicitly request to read an array of type Map
+   * @return Seq[Map] although it will be Seq[Any] typewise
+   */
+  override def readArray(buffer: RootInput, size: Int) = {
+    if (split) {
+      null // assume no splitting for this guy
+    }
+    else {
+      // as for the vector, read the bytecount and version of the map
+      val byteCount = buffer.readInt
+      val version = buffer.readShort
+
+      if ((version & kMemberWiseStreaming) > 0) {
+        null
+      }
+      else {
+        // object wise streaming
+        val data = for (i <- 0 until size) yield {
+          val nn = buffer.readInt
+          (for (j <- 0 until nn) yield (keyType.read(buffer), valueType.read(buffer))).toMap
+        }
+        entry+=1
+        data
+      }
+    }
+  }
+
+  /**
+   * explicitly request to read an array of type Map
+   * @return Seq[Map] although it will be Seq[Any] typewise
+   */
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
+    readArray(buffer, size)
+  }
 
   /** 
    * reading by assigning the buffer - we own the branch
@@ -407,6 +583,56 @@ case class SRVector(
   split: Boolean, // does it have subbranches
   isTop: Boolean // is this vector nested in another collection?
   ) extends SRCollection(name, isTop) {
+
+  /**
+   * explicitly request to read an array of type Vector
+   * @return Seq[Vector] although it will be Seq[Any] typewise
+   */
+  override def readArray(buffer: RootInput, size: Int) = {
+    if (split) {
+      null // assume no splitting for this guy
+    }
+    else {
+      val byteCount = buffer.readInt
+      val version = buffer.readShort
+      if ((version & kMemberWiseStreaming) > 0) {
+        // memberwise streaming
+        val memberVersion = buffer.readShort
+        if (memberVersion == 0) buffer.readInt
+
+        // cast to composite
+        val composite = t.asInstanceOf[SRComposite]
+
+        // have to transpose
+        val data = for (i <- 0 until size) yield {
+          val nn = buffer.readInt
+          (for (x <- composite.members) yield x.readArray(buffer, nn)
+          ).transpose.map(Row.fromSeq(_))
+        }
+        entry += 1L
+        data
+      }
+      else {
+        // objectwise streaming
+        val data = for (i <- 0 until size) yield {
+          val nn = buffer.readInt
+          for (j <- 0 until nn) yield t.read(buffer)
+        }
+        entry += 1L
+        data
+      }
+    }
+  }
+
+  /**
+   * explicitly request to read an array of type Map
+   * @return Seq[Map] although it will be Seq[Any] typewise
+   */
+  override def readArray(size: Int) = {
+    val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
+    readArray(buffer, size)
+  }
+
   /** 
    * reading by assigning the buffer - we own the branch
    * @return the vector of SRType
@@ -425,6 +651,10 @@ case class SRVector(
       val version = b.getClassVersion
       if ((version & kMemberWiseStreaming) > 0) {
         // memberwise streaming, safely case our composite
+        //
+        // TODO:
+        // for MemberWise Streaming we read w/o incrementing the event counters 
+        // but have to explicitly increment the counter for them!
         val composite = t.asInstanceOf[SRComposite]
 
         // we need to read the version of the vector member
@@ -434,12 +664,19 @@ case class SRVector(
 
         // we get Seq(f1[size], f2[size], ..., fN[size])
         // we just have to transpose it
-        entry += 1L;
-        (for (x <- composite.members)
-          yield {for (i <- 0 until size) yield x.read}).transpose
+        val data = (for (x <- composite.members)
+          yield {
+            // read array for each field, members will assign the buffer 
+            // themselves
+            x.readArray(size)
+          }).transpose.map(Row.fromSeq(_))
+        entry += 1L 
+        data
       }
       else {
         // object wise streaming
+        // TODO: Is it possible to streame objectwise for a 
+        // splitted branch???
         entry += 1L;
         for (i <- 0 until size) yield t.read
       }
@@ -461,6 +698,10 @@ case class SRVector(
       if ((version & kMemberWiseStreaming) > 0) {
         // memberwise streaming
         // assume we have some composite inside
+        //
+        // TODO:
+        // for MemberWise Streaming we read w/o incrementing the event counters 
+        // but have to explicitly increment the counter for them!
         val composite = t.asInstanceOf[SRComposite]
 
         // member Version
@@ -472,9 +713,13 @@ case class SRVector(
         val size = buffer.readInt
 
         // have to transpose
-        entry += 1L;
-        (for (x <- composite.members)
-          yield {for (i <- 0 until size) yield x.read(buffer)}).transpose
+        val data = (for (x <- composite.members)
+          yield {
+          // we own the buffer
+          x.readArray(buffer, size)
+        }).transpose.map(Row.fromSeq(_))
+        entry += 1L
+        data
       }
       else {
         // get the size
@@ -522,9 +767,14 @@ case class SRVector(
           val size = buffer.readInt
 
           // have to transpose
-          entry += 1L;
-          (for (x <- composite.members)
-            yield {for (i <- 0 until size) yield x.read(buffer)}).transpose
+          val data = (for (x <- composite.members)
+            yield {
+            //we own the buffer
+            x.readArray(buffer, size)
+            // increment the entry
+          }).transpose.map(Row.fromSeq(_))
+          entry += 1L
+          data 
         }
         else {
           // object wise streaming
@@ -555,6 +805,29 @@ case class SRComposite(
   split: Boolean, // is it split?
   isTop: Boolean // is it a top level branch?
   ) extends SRType(name) {
+
+  override def readArray(size: Int) = {
+    // this can not happen as STL node flattens all the composites
+    // when readArray is called, it will be called already on members of the composite
+    val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
+    readArray(buffer, size)
+  }
+
+  override def readArray(buffer: RootInput, size: Int) = {
+    // contiguous storing is assumed
+    // for member wise streaming
+    // this composite is a member of some other composite
+    val data = for (i <- 0 until size) yield {
+      val byteCount = buffer.readInt
+      val version = buffer.readShort
+      if (version == 0) buffer.readInt
+
+      Row.fromSeq(for (m <- members) yield m.read(buffer))
+    }
+    entry += 1L
+    data
+  }
+
   /**
    * reading by assigning the buffer.
    * 1. For a class that is split =>
