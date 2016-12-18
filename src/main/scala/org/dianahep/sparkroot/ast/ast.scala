@@ -175,19 +175,22 @@ package object ast
       println(sep*level + s"$name: Array[$n]")
       printATT(t, level+1)
     }
-    case core.SRVector(name, _, t, _, _) => {
-      println(sep*level + s"$name: STL Vector")
+    case core.SRVector(name, _, t, split, isTop) => {
+      println(sep*level + s"$name: STL Vector. split=$split and isTop=$isTop")
       printATT(t, level+1)
     }
-    case core.SRMap(name, _, keyType, valueType, _, _) => {
-      println(sep*level + s"$name: Map ${keyType.name} => ${valueType.name}")
+    case core.SRMap(name, _, keyType, valueType, split, isTop) => {
+      println(sep*level + s"$name: Map ${keyType.name} => ${valueType.name}. split=$split and isTop=$isTop")
       println(sep*(level+1) + "Key Type:")
       printATT(keyType, level+2)
       println(sep*(level+1) + "Value Type:")
       printATT(valueType, level+2)
     }
-    case core.SRComposite(name, b, members, _, _) => {
-      println(sep*level + s"${name}: Composite")
+    case core.SRSTLString(name, _, isTop) => {
+      println(sep*level + s"$name: STL String isTop=$isTop")
+    }
+    case core.SRComposite(name, b, members, split, isTop) => {
+      println(sep*level + s"${name}: Composite split=$split isTop=$isTop")
       for (t <- members) printATT(t, level+1)
     }
     case _ => println("")
@@ -722,7 +725,16 @@ package object ast
           // probe the member type
           val ctype = streamerSTL.getCtype
           val t = 
-            if (ctype<61) synthesizeBasicStreamerType(ctype)
+            if (ctype<61) {
+              if (streamerSTL.getTypeName.contains("bool") && 
+                ctype == 21)
+                // BOOl shows up as ctype 21 - TODO: this needs to be fixed!
+                // synthesize this as 18
+                synthesizeBasicStreamerType(18)
+              else 
+                // this is some basic type - synthesize
+                synthesizeBasicStreamerType(ctype)
+            }
             else {
               val memberClassName = streamerSTL.getTypeName.slice(
                 streamerSTL.getTypeName.
@@ -760,7 +772,9 @@ package object ast
             }
         }
         case 4 => { // std::map
-
+          synthesizeClassName(streamerSTL.getTypeName,
+            b, parentType)
+          /*
           // probe the key/value types
           val keyValueTypeNames = streamerSTL.getTypeName.slice(
             streamerSTL.getTypeName.indexOf('<')+1, streamerSTL.getTypeName.length-1)
@@ -825,6 +839,7 @@ package object ast
                 if (b.getBranches.size==0) false else true, true)
             }
           }
+          */
         }
         case 365 => { // std::string
           if (b == null) 
@@ -846,8 +861,22 @@ package object ast
       b: TBranchElement, 
       streamerInfo: TStreamerInfo,
       streamerElement: TStreamerElement, 
-      parentType: core.SRTypeTag
-    ) = {
+      parentType: core.SRTypeTag,
+      flattenable: Boolean = false // is this branch flattenable
+    ): core.SRType = {
+      def shuffleStreamerInfo(sinfo: TStreamerInfo) = {
+        val elems = sinfo.getElements
+        val bases = 
+          for (i <- 0 until elems.size; se=elems.get(i).asInstanceOf[TStreamerElement]
+            if se.getType==0) 
+            yield se
+        val rest = 
+          for (i <- 0 until elems.size; se=elems.get(i).asInstanceOf[TStreamerElement]
+            if se.getType != 0) 
+            yield se
+        rest ++ bases
+      }
+
       val elements = streamerInfo.getElements
       if (elements.size==0) // that is some empty class
         core.SRNull
@@ -855,19 +884,26 @@ package object ast
         synthesizeStreamerElement(b, elements.get(0).asInstanceOf[TStreamerElement],
           parentType)
       else {
-        if (b==null)
+        if (b==null) {
+          // NOTE:
+          // Members of BASE classes come at the end
+          // shuffle the elements first
           core.SRComposite(
             if (streamerElement==null) "" else streamerElement.getName
             , null,
             for (i <- 0 until elements.size)
-              yield synthesizeStreamerElement(null,
+              yield synthesizeStreamerElement(null, 
                 elements.get(i).asInstanceOf[TStreamerElement], core.SRCompositeType),
-            false, false
+            false, false 
           )
-        else if (b.getBranches.size==0)
+        }
+        else if (b.getBranches.size==0) {
           // unsplittable branch
           // members do not need the branch for reading
           // buffer will be passed to them
+          //
+          // NOTE: Members of BASE classes come at the end
+          // shuffle the elements first
           core.SRComposite(b.getName, b,
             for (i <- 0 until elements.size) 
               yield synthesizeStreamerElement(null, 
@@ -878,23 +914,155 @@ package object ast
               case _ => false
             }
           )
+        }
         else 
           // splittable
-          // subs have id to map to the streamerElement 
-          core.SRComposite(
-            b.getName, b,
-            for (i <- 0 until b.getBranches.size; 
-              sub=b.getBranches.get(i).asInstanceOf[TBranchElement])
-              yield synthesizeStreamerElement(sub, 
-              elements.get(sub.getID).asInstanceOf[TStreamerElement], 
-              core.SRCompositeType),
-            true,
-            parentType match {
-              case core.SRRootType => true
-              case _ => false
-            }
-          )
+          // can be flattenable or not flattenable
+          if (b.getType==1 || b.getType==2 || b.getType==4) {
+            // this is either a BASE/Object inside some leaf
+            // or an STL Collection
+            synthesizeFlattenable(b, streamerInfo)
+          }
+          else {
+            // non-flattenable branch
+            core.SRComposite(
+              b.getName, b,
+              for (i <- 0 until b.getBranches.size; 
+                sub=b.getBranches.get(i).asInstanceOf[TBranchElement])
+                yield synthesizeStreamerElement(sub, 
+                elements.get(sub.getID).asInstanceOf[TStreamerElement], 
+                core.SRCompositeType),
+              true,
+              parentType match {
+                case core.SRRootType => true
+                case _ => false
+              }
+            )
+          }
       }
+    }
+
+    /**
+     * Synthesize a branch whose sub branches are flattened
+     * @return SRType
+     */
+    def synthesizeFlattenable(
+      b: TBranchElement, // branch whose subs are flattened
+      streamerInfo: TStreamerInfo // streamer Info of this branch
+    ) = {
+      def findBranch(objectName: String, 
+        history: Seq[String]
+      ): TBranchElement = {
+        // build the full name of the branch
+        val fullName = 
+          if (b.getType==1) 
+            if (b.getName.count(_ == '.') == 0)
+              // no . seps
+              (history ++ Seq(objectName)).mkString(".")
+            else
+              // there are dots
+              (b.getName.split('.').dropRight(1) ++ (history ++ Seq(objectName))).
+              mkString(".")
+          else
+            if (b.getName.count(_ == '.') == 0)
+              // no . seps
+              (Seq(b.getName) ++ (history ++ Seq(objectName))).mkString(".")
+            else
+              (b.getName.split('.') ++ (history ++ Seq(objectName))).mkString(".")
+
+        // debug 
+        if (debug>0){
+          println(s"History: $history")
+          println(s"object Name: $objectName")
+          println(s"fullName: $fullName")
+        }
+
+        // iterate over all of them and take the head of the result
+        (for (i <- 0 until b.getBranches.size; 
+          sub=b.getBranches.get(i).asInstanceOf[TBranchElement]; subName= {
+            // when we have arrays, the square brackets are reflected in the name
+            // of the branch - strip them!
+            if (sub.getName.indexOf('[')>0) 
+              sub.getName.substring(0, sub.getName.indexOf('['))
+            else 
+              sub.getName
+          }
+          if subName == fullName) yield sub).head
+      }
+
+      def iterate(info: TStreamerInfo, history: Seq[String]): Seq[core.SRType] = {
+        // right away we have composite
+        for (i <- 0 until info.getElements.size; 
+          streamerElement=info.getElements.get(i).asInstanceOf[TStreamerElement]) yield {
+          val ttt = streamerElement.getType
+          if (ttt == 0) { 
+            // this is the BASE class
+            if (b.getType==4) {
+              // STL node - everything is flattened
+
+              // find the streamer
+              val sInfo = streamers.applyOrElse(streamerElement.getName,
+                (x: String) => null)
+              // create a composite and recursively iterate the sub branches
+              core.SRComposite(streamerElement.getName, null,
+                iterate(sInfo, history), true, false)
+            }
+            else {
+              // not an STL node
+
+              // find the sub branch for this
+              val sub = findBranch(streamerElement.getName, history)
+              // find the TStreamerInfo for this object
+              val sInfo = streamers.applyOrElse(streamerElement.getName,
+                (x: String) => null)
+              // synthesize this guy
+              synthesizeStreamerInfo(sub, sInfo, streamerElement, 
+                core.SRCompositeType, true)
+            }
+          }
+          else if (ttt < 61 || ttt == 500) {
+            // basic type or anything that is of STL type goes into 
+            // element synthesis
+
+            // find the branch for it!
+            val sub = findBranch(streamerElement.getName, history)
+            // send for synthesis
+            synthesizeStreamerElement(sub, streamerElement,
+              core.SRCompositeType)
+          }
+          else {
+            // this typically would be some composite class
+            // which we send recursively to itearte over again if it's not split
+            // or we get the streamerInfo and send to synthesize
+
+            // find the streamer 
+            val sInfo = streamers.applyOrElse(streamerElement.getTypeName,
+              (x: String) => null)
+
+            // TODO: This try/catch is not the best
+            // create the composite and recursively iterate over all the members
+            // if it fails => throws an exception, check then
+            // that this branch of type 2 is not actually flattenend
+            try {
+              core.SRComposite(streamerElement.getName, null,
+                iterate(sInfo, history :+ streamerElement.getName), true, false
+              )
+            } catch {
+              case _ : Throwable => {
+                val sub = findBranch(streamerElement.getName, history)
+                synthesizeStreamerInfo(sub, sInfo, streamerElement,
+                  core.SRCompositeType, false)
+              }
+            }
+          }
+        }
+      }
+
+      if (debug>0) println(s"Starting synthesize of Flattenable branch: ${b.getName}")
+
+      // create a composite by iterating recursively over the members
+      core.SRComposite(b.getName, b,
+        iterate(streamerInfo, Seq()), true, false)
     }
 
     /**

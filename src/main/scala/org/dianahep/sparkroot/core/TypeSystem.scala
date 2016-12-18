@@ -441,28 +441,8 @@ case class SRMap(
       // for a split collection - size is in the collection leaf node
       val size = buffer.readInt
 
-      // check for streaming type - object wise or memberwise
-      val version = b.getClassVersion
-      if ((version & kMemberWiseStreaming) > 0) {
-        null
-        /*
-        // we need to read the version of the vector member
-        val memberVersion = buffer.readShort
-        // if 0 - read checksum
-        if (memberVersion == 0) buffer.readInt
-
-        // we get Seq(f1[size], f2[size], ..., fN[size])
-        // we just have to transpose it
-        entry += 1L;
-        for (x <- composite.members)
-          yield for (i <- 0 until size) yield x.read).transpose
-          */
-      }
-      else {
-        // object wise streaming
-        entry += 1L;
-        (for (i <- 0 until size) yield (keyType.read, valueType.read)).toMap
-      }
+      // SLT Map never shows up as splittable
+      null
     }
     else {
       // this map collection does not have subbranches.
@@ -500,9 +480,12 @@ case class SRMap(
         */
       }
       else {
+        // memberwise straeming
+
         // get the size
         val size = buffer.readInt
 
+        // read
         entry += 1L;
         (for (i <- 0 until size) yield (keyType.read(buffer), 
           valueType.read(buffer))).toMap
@@ -551,6 +534,7 @@ case class SRMap(
           (for (x <- composite.members)
             yield for (i <- 0 until size) yield x.read(buffer)).transpose
           */
+         null
         }
         else {
           // object wise streaming
@@ -589,6 +573,12 @@ case class SRVector(
    * @return Seq[Vector] although it will be Seq[Any] typewise
    */
   override def readArray(buffer: RootInput, size: Int) = {
+    //
+    // NOTE:
+    // This can happen when this collection is nested inside some 
+    // other splitted collection, STL Node.
+    //
+
     if (split) {
       null // assume no splitting for this guy
     }
@@ -629,6 +619,15 @@ case class SRVector(
    * @return Seq[Map] although it will be Seq[Any] typewise
    */
   override def readArray(size: Int) = {
+    //
+    // NOTE:
+    // this can happen for a collection inside some STL Node.
+    // STL Node will be splitted and this nested collection will be occupying its own
+    // branch. That branch will not get splitted further!
+    // Therefore we simply assign the buffer for this branch and call 
+    // readArray(buffer,..).
+    //
+
     val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
     readArray(buffer, size)
   }
@@ -648,38 +647,18 @@ case class SRVector(
       val size = buffer.readInt
 
       // check for streaming type - object wise or memberwise
-      val version = b.getClassVersion
-      if ((version & kMemberWiseStreaming) > 0) {
-        // memberwise streaming, safely case our composite
-        //
-        // TODO:
-        // for MemberWise Streaming we read w/o incrementing the event counters 
-        // but have to explicitly increment the counter for them!
-        val composite = t.asInstanceOf[SRComposite]
+      val composite = t.asInstanceOf[SRComposite]
 
-        // we need to read the version of the vector member
-        val memberVersion = buffer.readShort
-        // if 0 - read checksum
-        if (memberVersion == 0) buffer.readInt
-
-        // we get Seq(f1[size], f2[size], ..., fN[size])
-        // we just have to transpose it
-        val data = (for (x <- composite.members)
-          yield {
-            // read array for each field, members will assign the buffer 
-            // themselves
-            x.readArray(size)
-          }).transpose.map(Row.fromSeq(_))
-        entry += 1L 
-        data
-      }
-      else {
-        // object wise streaming
-        // TODO: Is it possible to streame objectwise for a 
-        // splitted branch???
-        entry += 1L;
-        for (i <- 0 until size) yield t.read
-      }
+      // we get Seq(f1[size], f2[size], ..., fN[size])
+      // we just have to transpose it
+      val data = (for (x <- composite.members)
+        yield {
+          // read array for each field, members will assign the buffer 
+          // themselves
+          x.readArray(size)
+        }).transpose.map(Row.fromSeq(_))
+      entry += 1L 
+      data
     }
     else {
       // this vector collection does not have subbranches.
@@ -726,6 +705,7 @@ case class SRVector(
         val size = buffer.readInt
 
         entry += 1L;
+        println(s"reading vector unsplitted $name")
         for (i <- 0 until size) yield t.read(buffer)
       }
     }
@@ -770,6 +750,7 @@ case class SRVector(
           val data = (for (x <- composite.members)
             yield {
             //we own the buffer
+            println(s"reading Array for member ${x.name} of composite: ${composite.name}")
             x.readArray(buffer, size)
             // increment the entry
           }).transpose.map(Row.fromSeq(_))
@@ -807,10 +788,27 @@ case class SRComposite(
   ) extends SRType(name) {
 
   override def readArray(size: Int) = {
-    // this can not happen as STL node flattens all the composites
-    // when readArray is called, it will be called already on members of the composite
-    val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
-    readArray(buffer, size)
+    // 
+    // This will happen when we have a composite inside 
+    // a splittable collection of objects - STL Node.
+    // This can come in 2 forms -
+    // 1. hollow composites - don't own a branch - just expand to its members
+    // 2. non-hollow non splittable
+    //
+
+    if (split) {
+      // if this is split - simply pass to members
+      // basically this composite is HOLLOW!
+      val data = (for (m <- members) yield m.readArray(size)).
+        transpose.map(Row.fromSeq(_))
+      entry += 1L
+      data
+    }
+    else {
+      // this is not splittable - so we must assign the buffer and read
+      val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
+      readArray(buffer, size)
+    }
   }
 
   override def readArray(buffer: RootInput, size: Int) = {
