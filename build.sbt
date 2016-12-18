@@ -16,7 +16,7 @@ sparkVersion := "2.0.0"
 sparkComponents := Seq("sql")
 
 resolvers += Resolver.mavenLocal
-libraryDependencies += "org.diana-hep" % "root4j" % "0.1.2"
+libraryDependencies += "org.diana-hep" % "root4j" % "0.1.3"
 
 // publishing to Maven
 publishMavenStyle := true
