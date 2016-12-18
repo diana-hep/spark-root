@@ -418,6 +418,27 @@ package object ast
           if (streamerInfo==null) core.SRNull
           else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
         }
+
+        // TODO: Retrieiving of TObject derived classes is not supported yet
+        // TObject
+        case 66 => {
+          // NOTE: get the typename
+          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
+            (x: String) => null)
+          if (streamerInfo==null) core.SRNull
+          else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
+        }
+        case 67 => {
+          // NOTE: get the typename
+          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
+            (x: String) => null)
+          if (streamerInfo==null) core.SRNull
+          else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
+        }
+        // TString
+        case 65 => core.SRString(streamerElement.getName, b,
+          if (b==null) null
+          else b.getLeaves.get(0).asInstanceOf[TLeafElement])
         case 500 => synthesizeStreamerSTL(b, streamerElement.asInstanceOf[TStreamerSTL],
           parentType)
         case _ => core.SRNull
