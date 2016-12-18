@@ -189,8 +189,8 @@ package object ast
     case core.SRSTLString(name, _, isTop) => {
       println(sep*level + s"$name: STL String isTop=$isTop")
     }
-    case core.SRComposite(name, b, members, split, isTop) => {
-      println(sep*level + s"${name}: Composite split=$split isTop=$isTop")
+    case core.SRComposite(name, b, members, split, isTop, isBase) => {
+      println(sep*level + s"${name}: Composite split=$split isTop=$isTop isBase=$isBase")
       for (t <- members) printATT(t, level+1)
     }
     case _ => println("")
@@ -678,8 +678,6 @@ package object ast
 
           // TODO: Do we need a special type for pair???
           // TODO: Can pair be split???
-          // for now assume that pair is not being split further
-          // in reality it should have a TStreamerInfo for it since it's a composite
           if (b==null) 
             parentType match {
               // branch is null for this type
@@ -885,25 +883,22 @@ package object ast
           parentType)
       else {
         if (b==null) {
-          // NOTE:
-          // Members of BASE classes come at the end
-          // shuffle the elements first
           core.SRComposite(
             if (streamerElement==null) "" else streamerElement.getName
             , null,
             for (i <- 0 until elements.size)
               yield synthesizeStreamerElement(null, 
                 elements.get(i).asInstanceOf[TStreamerElement], core.SRCompositeType),
-            false, false 
+            false, false, 
+            if (streamerElement == null)  false
+            else if (streamerElement.getType==0)true 
+            else false
           )
         }
         else if (b.getBranches.size==0) {
           // unsplittable branch
           // members do not need the branch for reading
           // buffer will be passed to them
-          //
-          // NOTE: Members of BASE classes come at the end
-          // shuffle the elements first
           core.SRComposite(b.getName, b,
             for (i <- 0 until elements.size) 
               yield synthesizeStreamerElement(null, 

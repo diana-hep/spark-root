@@ -783,8 +783,9 @@ case class SRComposite(
   override val name: String, // name
   b: TBranch, // branch
   members: Seq[SRType], // fields
-  split: Boolean, // is it split?
-  isTop: Boolean // is it a top level branch?
+  split: Boolean, // is it split - are there sub branches
+  isTop: Boolean, // top branch composite doens't read the header
+  isBase: Boolean = false // is this composite a base class or not
   ) extends SRType(name) {
 
   override def readArray(size: Int) = {
@@ -792,15 +793,17 @@ case class SRComposite(
     // This will happen when we have a composite inside 
     // a splittable collection of objects - STL Node.
     // This can come in 2 forms -
-    // 1. hollow composites - don't own a branch - just expand to its members
-    // 2. non-hollow non splittable
     //
 
     if (split) {
       // if this is split - simply pass to members
       // basically this composite is HOLLOW!
-      val data = (for (m <- members) yield m.readArray(size)).
-        transpose.map(Row.fromSeq(_))
+      val data = 
+        if (members.size==0 ) 
+          for (i <- 0 until size) yield Row()
+        else
+          (for (m <- members) yield m.readArray(size)).
+            transpose.map(Row.fromSeq(_))
       entry += 1L
       data
     }
@@ -811,19 +814,32 @@ case class SRComposite(
     }
   }
 
+  // this is for memberwise reading
   override def readArray(buffer: RootInput, size: Int) = {
-    // contiguous storing is assumed
-    // for member wise streaming
-    // this composite is a member of some other composite
-    val data = for (i <- 0 until size) yield {
-      val byteCount = buffer.readInt
-      val version = buffer.readShort
-      if (version == 0) buffer.readInt
-
-      Row.fromSeq(for (m <- members) yield m.read(buffer))
+    if (isBase) {
+      // this guy is hollow  we just pass -> typically for BASE classes
+      val data = 
+        if (members.size == 0)
+          for (i <- 0 until size) yield Row()
+        else
+          (for (m <- members) yield m.readArray(buffer, size)).
+          transpose.map(Row.fromSeq(_))
+      entry += 1L
+      data
     }
-    entry += 1L
-    data
+    else {
+      // this guy is not hollow - typically for composites that are not BASE
+      // when there is no splitting
+      val data = for (i <- 0 until size) yield {
+        val byteCount = buffer.readInt
+        val version = buffer.readShort
+        if (version == 0) buffer.readInt
+
+        Row.fromSeq(for (m <- members) yield m.read(buffer))
+      }
+      entry += 1L
+      data
+    }
   }
 
   /**
