@@ -1,6 +1,8 @@
 # Spark ROOT
 **Under rapid development :+1:**
 
+**Current Release is on Maven Central: 0.1.3 **
+
 Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/) to be able to read ROOT TTrees, infer the schema and manipulate the data via Spark's DataFrames. Reading is provided by [root4j](https://github.com/diana-hep/root4j).
 
 ## Supported Features
@@ -12,6 +14,14 @@ Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/)
 - 1D or N-Dimensional arrays are supported of fixed dimensions and of simple Numerical Types
 - Variable Sized Arrays that follows the standard ROOT's convention. (e.g. in the leaflist you can when you include "var1[othervarname]/I" where *othervarname* is the name of the counter).
 - A character string terminated by the 0 character is supported
+
+- STL Collections of Basic Types
+- Nested STL Collections of Basic Types (vector\<vector\<map\<int, float\> \> \>)
+- Composite Classes of Basic Types
+- Composite Classes of other Composite
+- Composite Classes with STL Collections of Composites as members
+- STL Collection of Composites
+- STL Collections of Composites with STL Collection of Composite as class member
 
 ## Requirements
 - Apache Spark 2.0.
