@@ -705,7 +705,6 @@ case class SRVector(
         val size = buffer.readInt
 
         entry += 1L;
-        println(s"reading vector unsplitted $name")
         for (i <- 0 until size) yield t.read(buffer)
       }
     }
@@ -750,7 +749,6 @@ case class SRVector(
           val data = (for (x <- composite.members)
             yield {
             //we own the buffer
-            println(s"reading Array for member ${x.name} of composite: ${composite.name}")
             x.readArray(buffer, size)
             // increment the entry
           }).transpose.map(Row.fromSeq(_))
