@@ -1,7 +1,7 @@
 # Spark ROOT
 **Under rapid development :+1:**
 
-**Current Release is on Maven Central: 0.1.3 **
+**Current Release is on Maven Central: 0.1.4 **
 
 Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/) to be able to read ROOT TTrees, infer the schema and manipulate the data via Spark's DataFrames. Reading is provided by [root4j](https://github.com/diana-hep/root4j).
 
@@ -22,6 +22,11 @@ Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/)
 - Composite Classes with STL Collections of Composites as members
 - STL Collection of Composites
 - STL Collections of Composites with STL Collection of Composite as class member
+- TClonesArray of objects derived from TObject, when TClonesArray occupies its own branch (all cases are in development)
+
+## Currently not Supported Features
+- Pointers to objects and basic types have not been treated currently.
+- Collections of TObject-derived classes is not yet supported (but can be and will be added shortly!)
 
 ## Requirements
 - Apache Spark 2.0.

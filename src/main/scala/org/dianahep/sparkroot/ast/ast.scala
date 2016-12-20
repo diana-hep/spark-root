@@ -496,6 +496,7 @@ package object ast
         "forward_list", "unordered_set", "unordered_multiset")
       val stlAssociative = Seq("map", "unordered_map", "multimap", "unordered_multimap")
       val stlPair = "pair"
+      val stlBitset = "bitset"
       val stlStrings = Seq("string", "__basic_string_common<true>")
       
       // quickly parse the class type and template argumetns
@@ -529,6 +530,10 @@ package object ast
 
       // based on the class type name
       classTypeString match {
+        case it if stlBitset == it => {
+          // remap this guy to vector of bool
+          synthesizeClassName("vector<bool>", b, parentType)
+        }
         case it if stlLinear contains it => {
           // we have something that is vector like
           // arguments must be a single typename
@@ -860,6 +865,10 @@ package object ast
           }
           */
         }
+        case 8 => {
+          // std::bitset - map it to vector of bool
+          synthesizeClassName("vector<bool>", b, parentType)
+        }
         case 365 => { // std::string
           if (b == null) 
             parentType match {
@@ -902,6 +911,21 @@ package object ast
       else if (elements.get(0).asInstanceOf[TStreamerElement].getName=="This") 
         synthesizeStreamerElement(b, elements.get(0).asInstanceOf[TStreamerElement],
           parentType)
+      else if (streamerInfo.getName == "TClonesArray") {
+        if (b == null) {
+          // only for clone that occupy a branch.
+          core.SRNull
+        }else {
+          // get the name of the object in the TClonesArray
+          val typeName = b.getClonesName
+          // create a name to be synthesized - just map to vector
+          val nameToSynthesize = s"vector<$typeName>"
+          // send a vector<typeName> to be synthesized
+          // this will eventually call back to synthesizeStreamerInfo
+          // and get properly unwrapped
+          synthesizeClassName(nameToSynthesize, b, parentType)
+        }
+      }
       else {
         if (b==null) {
           core.SRComposite(
@@ -934,9 +958,9 @@ package object ast
         else 
           // splittable
           // can be flattenable or not flattenable
-          if (b.getType==1 || b.getType==2 || b.getType==4) {
+          if (b.getType==1 || b.getType==2 || b.getType==3 || b.getType==4) {
             // this is either a BASE/Object inside some leaf
-            // or an STL Collection
+            // or an STL Collection or TClonesArray
             synthesizeFlattenable(b, streamerInfo)
           }
           else {
@@ -1009,12 +1033,19 @@ package object ast
       def iterate(info: TStreamerInfo, history: Seq[String]): Seq[core.SRType] = {
         // right away we have composite
         for (i <- 0 until info.getElements.size; 
-          streamerElement=info.getElements.get(i).asInstanceOf[TStreamerElement]) yield {
+          streamerElement=info.getElements.get(i).asInstanceOf[TStreamerElement]
+          // skip if TObject is -1 => don't create a composite for it
+          if streamerElement.getType >= 0) yield {
+          if (debug>0) {
+            println(s"StreamerElement: type=${streamerElement.getType} name=${streamerElement.getName} typeName=${streamerElement.getTypeName}")
+          }
+
           val ttt = streamerElement.getType
           if (ttt == 0) { 
             // this is the BASE class
-            if (b.getType==4) {
+            if (b.getType==4 || b.getType==3) {
               // STL node - everything is flattened
+              // TClonesArray node - everything is flattened
 
               // find the streamer
               val sInfo = streamers.applyOrElse(streamerElement.getName,
