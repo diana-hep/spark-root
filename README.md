@@ -1,7 +1,7 @@
 # Spark ROOT
 **Under rapid development :+1:**
 
-**Current Release is on Maven Central: 0.1.4 **
+**Current Release is on Maven Central: 0.1.4**
 
 Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/) to be able to read ROOT TTrees, infer the schema and manipulate the data via Spark's DataFrames. Reading is provided by [root4j](https://github.com/diana-hep/root4j).
 
