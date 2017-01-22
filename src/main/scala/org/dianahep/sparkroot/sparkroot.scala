@@ -1,5 +1,6 @@
 package org.dianahep
 
+// spark related
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.DataFrameReader
@@ -11,8 +12,10 @@ import org.apache.spark.sql.sources.PrunedFilteredScan
 import org.apache.spark.sql.sources.RelationProvider
 import org.apache.spark.sql.types._
 
-//import org.apache.logging.log4j.scala.Logging
+// hadoop hdfs 
+import org.apache.hadoop.fs.{Path, FileSystem}
 
+// sparkroot or root4j
 import org.dianahep.root4j.core.RootInput
 import org.dianahep.root4j._
 import org.dianahep.root4j.interfaces._
@@ -51,17 +54,29 @@ package object sparkroot {
    * 1. Builds the Schema
    * 2. Maps execution of each file to a Tree iterator
    */
-  class RootTableScan(path: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan{
+  class RootTableScan(path: String, treeName: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan{
+
+    // path is either a dir with files or a pathToFile
+    private val inputPathFiles = {
+      val hPath = new Path(path)
+      val fs = hPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+      fs.listStatus(hPath).map(_.getPath.toString)
+    }
     
     // create the abstract tree
 //    private val ast: AbstractSchemaTree = 
     private val att: core.SRType = 
     {
       //logger.info("Building the Abstract Schema Tree...")
-      println("Building the Abstract Schema Tree...")
-      val reader = new RootFileReader(new java.io.File(Seq(path) head))
+      println(s"Building the Abstract Schema Tree... for treeName=$treeName")
+      val reader = new RootFileReader(inputPathFiles head)
 //      val tmp = buildAST(findTree(reader.getTopDir), null, null) 
-      val tmp = buildATT(findTree(reader.getTopDir), arrangeStreamers(reader), null)
+      val tmp = 
+        if (treeName==null)
+          buildATT(findTree(reader.getTopDir), arrangeStreamers(reader), null)
+        else 
+          buildATT(reader.getKey(treeName).getObject.asInstanceOf[TTree],
+            arrangeStreamers(reader), null)
       //logger.info("Done")
       println("Done")
       tmp
@@ -83,15 +98,19 @@ package object sparkroot {
       println("Building Scan")
       println(requiredColumns.mkString(" "))
       println(filters)
+      val localTreeName = treeName  
 
       // parallelize over all the files
-      val r = sqlContext.sparkContext.parallelize(Seq(path), 1).
-        flatMap({fileName =>
+      val r = sqlContext.sparkContext.parallelize(inputPathFiles).
+        flatMap({pathName =>
           // TODO: support HDFS (may involve changes to root4j)
-          val reader = new RootFileReader(new java.io.File(fileName))
+          val reader = new RootFileReader(pathName)
           // get the TTree
           // TODO: we could add an option that specificies the TTree...
-          val rootTree = findTree(reader)
+          val rootTree = 
+//            findTree(reader)
+            if (localTreeName == null) findTree(reader)
+            else reader.getKey(localTreeName).getObject.asInstanceOf[TTree]
           // the real work starts here
           new RootTreeIterator(rootTree, arrangeStreamers(reader), 
             requiredColumns, filters)
@@ -109,7 +128,8 @@ package object sparkroot {
 package sparkroot {
   class DefaultSource extends RelationProvider {
     def createRelation(sqlContext: SQLContext, parameters: Map[String, String]) = {
-      new RootTableScan(parameters.getOrElse("path", sys.error("ROOT path must be specified")))(sqlContext)
+      println(parameters)
+      new RootTableScan(parameters.getOrElse("path", sys.error("ROOT path must be specified")), parameters.getOrElse("tree", null))(sqlContext)
     }
   }
 }

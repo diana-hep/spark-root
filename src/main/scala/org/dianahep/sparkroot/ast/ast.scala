@@ -9,6 +9,7 @@ import org.apache.spark.sql.types._
 
 package object ast
 {
+  private val debug: Boolean = System.getProperty("debug") != null;
 
   /*
    * LeafInfo - simple TLeaf info
@@ -171,6 +172,7 @@ package object ast
     case core.SRByte(name, _, _) => println(sep*level+s"$name: Byte")
     case core.SRBoolean(name, _, _) => println(sep*level+s"$name: Boolean")
     case core.SRFloat(name, _, _) => println(sep*level+s"$name: Float")
+    case core.SRShort(name, _, _) => println(sep*level + s"$name: Short")
     case core.SRArray(name, _, _, t, n) => {
       println(sep*level + s"$name: Array[$n]")
       printATT(t, level+1)
@@ -208,8 +210,7 @@ package object ast
   def buildATT(
     tree: TTree,
     streamers: Map[String, TStreamerInfo],
-    requiredColumns: Array[String],
-    debug: Int = 0 // 0 for no debug messages printed
+    requiredColumns: Array[String]
   ): core.SRType = {
 
     def synthesizeLeafType(b: TBranch, leaf: TLeaf): core.SRType = 
@@ -307,6 +308,13 @@ package object ast
       case _ => core.SRNull
     }
 
+    /*
+     * Format the name if it's a pointer to the class name
+     */
+    def formatNameForPointer(className: String) = 
+      if (className.last=='*') className.take(className.length-1)
+      else className
+
     def synthesizeStreamerElement(
       b: TBranchElement, 
       streamerElement: TStreamerElement,
@@ -333,15 +341,16 @@ package object ast
           // NOTE: get the name instead of type name for the super class
           val streamerInfo = streamers.applyOrElse(streamerElement.getName,
           (x: String) => null)
-          if (streamerInfo==null) core.SRNull
+          if (streamerInfo==null) core.SRUnknown(streamerElement.getName)
           else {
             // in principle there must be the TStreamerInfo for all the bases 
             // used
-            if (debug>0) println(s"There is a class name for: ${streamerElement.getName}")
+            if (debug) println(s"There is a class name for: ${streamerElement.getName}")
             if (streamerInfo.getElements.size==0) 
               // empty BASE CLASS, create an empty composite
               // splitting does not matter - it's empty
-              core.SRComposite(streamerElement.getName, b, Seq(), false, false)
+            // BUT it's the base class!!!
+              core.SRComposite(streamerElement.getName, b, Seq(), false, false, true)
             else
               synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
           }
@@ -406,16 +415,18 @@ package object ast
         case it if 21 until 40 contains it => iterateArray(streamerElement.getArrayDim)
         case 61 => {
           // NOTE: get the type name
-          val streamerInfo = streamers.applyOrElse(streamerElement.getTypeName,
+          val streamerInfo = streamers.applyOrElse(
+            formatNameForPointer(streamerElement.getTypeName),
           (x: String) => null)
-          if (streamerInfo==null) core.SRNull
+          if (streamerInfo==null) core.SRUnknown(streamerElement.getName)
           else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
         }
         case 62 => {
           // NOTE: get the typename
-          val streamerInfo = streamers.applyOrElse(streamerElement.getTypeName,
+          val streamerInfo = streamers.applyOrElse(
+            formatNameForPointer(streamerElement.getTypeName),
             (x: String) => null)
-          if (streamerInfo==null) core.SRNull
+          if (streamerInfo==null) core.SRUnknown(streamerElement.getName)
           else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
         }
 
@@ -425,14 +436,14 @@ package object ast
           // NOTE: get the typename
           val streamerInfo = streamers.applyOrElse(streamerElement.getName,
             (x: String) => null)
-          if (streamerInfo==null) core.SRNull
+          if (streamerInfo==null) core.SRUnknown(streamerElement.getName)
           else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
         }
         case 67 => {
           // NOTE: get the typename
           val streamerInfo = streamers.applyOrElse(streamerElement.getName,
             (x: String) => null)
-          if (streamerInfo==null) core.SRNull
+          if (streamerInfo==null) core.SRUnknown(streamerElement.getName)
           else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
         }
         // TString
@@ -441,7 +452,18 @@ package object ast
           else b.getLeaves.get(0).asInstanceOf[TLeafElement])
         case 500 => synthesizeStreamerSTL(b, streamerElement.asInstanceOf[TStreamerSTL],
           parentType)
-        case _ => core.SRNull
+        case 69 => {
+          if (debug) {
+            println(s"typeName=${streamerElement.getTypeName} name=${streamerElement.getName} strippedName=${streamerElement.getTypeName.take(streamerElement.getTypeName.length-1)}")
+          }
+          // this is a pointer
+          val streamerInfo = streamers.applyOrElse(
+            formatNameForPointer(streamerElement.getTypeName),
+            (x: String) => null)
+          if (streamerInfo == null) core.SRUnknown(streamerElement.getName)
+          else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
+        }
+        case _ => core.SRUnknown("unidentified STreamerElement type")
       }
     }
 
@@ -484,6 +506,7 @@ package object ast
      * 1) STL Collection
      * 2) std::array ???
      * 3) pair<T, U>
+     * 4) enum
      *
      * we basically assume that if something is not present, it must be something of STL
      */
@@ -501,13 +524,13 @@ package object ast
       
       // quickly parse the class type and template argumetns
       val classTypeRE = "(.*?)<(.*?)>".r
-      if (debug>0) println(s"classType being synthesized: ${className} ${className.trim.length} ${className.length}")
+      if (debug) println(s"classType being synthesized: ${className} ${className.trim.length} ${className.length}")
       val (classTypeString, argumentsTypeString) = className match {
         case classTypeRE(aaa,bbb) => (aaa,bbb.trim)
         case _ => (null, null)
       }
 
-      if (debug>0) println(s"Parsed classType=$classTypeString and argumentsType=$argumentsTypeString")
+      if (debug) println(s"Parsed classType=$classTypeString and argumentsType=$argumentsTypeString")
 
       // check if this is a string
       // and return if it is
@@ -524,9 +547,16 @@ package object ast
           }
       }
 
+      // 
+      // check if it's among custom streamers
+      //
+      val isCustom = customStreamers.applyOrElse(className,
+        (x: String) => core.SRNull)
+      if (isCustom != core.SRNull) return isCustom
+
       // if parsing is unsuccessful, assign null
       if (classTypeString == null || argumentsTypeString == null)
-        return core.SRNull
+        return core.SRUnknown(className)
 
       // based on the class type name
       classTypeString match {
@@ -591,11 +621,13 @@ package object ast
           // if there is a matching issue - assign null
           if (keyTypeString==null || valueTypeString==null) return core.SRNull
 
-          // key type is a basic type - assumed for now.
+          // check first if it is a basic type
+          // if not send to be synthesized
+          // TODO: For now, asssume either custom streamers or basic type
+          // therefore we send it with null for the branch!
           val keyType = 
-            if (synthesizeBasicTypeName(keyTypeString) == core.SRNull)
-              // no our key is not a basic type.... for now put null
-              core.SRNull
+            if (synthesizeBasicTypeName(keyTypeString) == core.SRNull) 
+              synthesizeClassName(keyTypeString, null, core.SRCollectionType)
             else
               synthesizeBasicTypeName(keyTypeString)
 
@@ -647,7 +679,7 @@ package object ast
             case _ => (null, null)
           }
 
-          if (debug>0) println(s"We got a pair: first=$firstTypeString second=$secondTypeString")
+          if (debug) println(s"We got a pair: first=$firstTypeString second=$secondTypeString")
 
           // if there is a matching issue - assign null
           if (firstTypeString==null || secondTypeString==null) return core.SRNull
@@ -740,7 +772,7 @@ package object ast
       parentType: core.SRTypeTag
     ): core.SRType = {
       // debugging...
-      if (debug>0) println(s"TStreamer STL for type: ${streamerSTL.getTypeName}")
+      if (debug) println(s"TStreamer STL for type: ${streamerSTL.getTypeName}")
 
       // parse by the stl type
       streamerSTL.getSTLtype match {
@@ -768,7 +800,7 @@ package object ast
 
 
               if (streamerInfo==null) 
-                // no streamer info - type may be(must be) an STL collection
+                // no streamer info 
                 // right away - for nested STL no splitting!
                 synthesizeClassName(memberClassName, null, core.SRCollectionType)
               else synthesizeStreamerInfo(
@@ -907,7 +939,8 @@ package object ast
 
       val elements = streamerInfo.getElements
       if (elements.size==0) // that is some empty class
-        core.SRNull
+        core.SRComposite(streamerElement.getName, b, Seq(), false, false, 
+          streamerElement.getType==0)
       else if (elements.get(0).asInstanceOf[TStreamerElement].getName=="This") 
         synthesizeStreamerElement(b, elements.get(0).asInstanceOf[TStreamerElement],
           parentType)
@@ -1011,7 +1044,7 @@ package object ast
               (b.getName.split('.') ++ (history ++ Seq(objectName))).mkString(".")
 
         // debug 
-        if (debug>0){
+        if (debug){
           println(s"History: $history")
           println(s"object Name: $objectName")
           println(s"fullName: $fullName")
@@ -1036,7 +1069,7 @@ package object ast
           streamerElement=info.getElements.get(i).asInstanceOf[TStreamerElement]
           // skip if TObject is -1 => don't create a composite for it
           if streamerElement.getType >= 0) yield {
-          if (debug>0) {
+          if (debug) {
             println(s"StreamerElement: type=${streamerElement.getType} name=${streamerElement.getName} typeName=${streamerElement.getTypeName}")
           }
 
@@ -1083,29 +1116,35 @@ package object ast
             // or we get the streamerInfo and send to synthesize
 
             // find the streamer 
-            val sInfo = streamers.applyOrElse(streamerElement.getTypeName,
+            val sInfo = streamers.applyOrElse(
+                formatNameForPointer(streamerElement.getTypeName),
               (x: String) => null)
 
-            // TODO: This try/catch is not the best
-            // create the composite and recursively iterate over all the members
-            // if it fails => throws an exception, check then
-            // that this branch of type 2 is not actually flattenend
-            try {
-              core.SRComposite(streamerElement.getName, null,
-                iterate(sInfo, history :+ streamerElement.getName), true, false
-              )
-            } catch {
-              case _ : Throwable => {
-                val sub = findBranch(streamerElement.getName, history)
-                synthesizeStreamerInfo(sub, sInfo, streamerElement,
-                  core.SRCompositeType, false)
+            // if there is no sInfo
+            if (sInfo == null) core.SRUnknown(streamerElement.getName)
+            else {
+
+              // TODO: This try/catch is not the best
+              // create the composite and recursively iterate over all the members
+              // if it fails => throws an exception, check then
+              // that this branch of type 2 is not actually flattenend
+              try {
+                core.SRComposite(streamerElement.getName, null,
+                  iterate(sInfo, history :+ streamerElement.getName), true, false
+                )
+              } catch {
+                case _ : Throwable => {
+                  val sub = findBranch(streamerElement.getName, history)
+                  synthesizeStreamerInfo(sub, sInfo, streamerElement,
+                    core.SRCompositeType, false)
+                }
               }
             }
           }
         }
       }
 
-      if (debug>0) println(s"Starting synthesize of Flattenable branch: ${b.getName}")
+      if (debug) println(s"Starting synthesize of Flattenable branch: ${b.getName}")
 
       // create a composite by iterating recursively over the members
       core.SRComposite(b.getName, b,
@@ -1139,7 +1178,7 @@ package object ast
       // for the non-empty list of columns that are required by for a query
       case _ => new core.SRRoot(tree.getName, tree.getEntries,
         for (i <- 0 until tree.getNBranches; b=tree.getBranch(i) 
-          if requiredColumns.contains(b.getName()))
+          if requiredColumns.contains(b.getName().replace(".", "_")))
           yield synthesizeTopBranch(b)
       )
     }
@@ -1563,4 +1602,11 @@ package object ast
       yield (streamer.getName, streamer)
     ).toMap
   }
+
+  val customStreamers: Map[String, core.SRType] = Map(
+    "trigger::TriggerObjectType" -> core.SRInt("", null, null),
+    "reco::Muon::MuonTrackType" -> core.SRInt("", null, null),
+    "pat::IsolationKeys" -> core.SRInt("", null, null),
+    "reco::IsoDeposit" -> core.SRInt("", null, null)
+  )
 }
