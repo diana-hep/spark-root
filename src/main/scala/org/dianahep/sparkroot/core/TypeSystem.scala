@@ -1040,7 +1040,7 @@ case class SRComposite(
    *   downstream
    * - m
    */
-  override def read = 
+  override def read: Any = 
     if (split) {
       if (debug) debugMe(s"read in split mode")
       // split class -- just pass the call to members
@@ -1052,6 +1052,9 @@ case class SRComposite(
       if (debug) debugMe(s"read in non-split mode")
       // composite is not split into subbranches for members
       // get the buffer
+      // if this composite is empty and has its own branch, nothing to read.
+      // version and other information 
+      if (members.length == 0) { entry+=1L; return Row()}
       val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeaf], entry)
 
       // check if this branch is top level or not
