@@ -4,7 +4,7 @@ organization := "org.diana-hep"
 
 licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
 
-version := "0.1.6"
+version := "0.1.7"
 //isSnapshot := true
 
 scalaVersion := "2.11.8"
@@ -34,9 +34,7 @@ publishTo := {
 publishArtifact in Test := false
 
 // include the log4j
-libraryDependencies += "org.apache.logging.log4j" % "log4j-api" % "2.7"
-libraryDependencies += "org.apache.logging.log4j" % "log4j-core" % "2.7"
-libraryDependencies += "org.apache.logging.log4j" %% "log4j-api-scala" % "2.7"
+libraryDependencies += "org.apache.logging.log4j" % "log4j" % "2.8"
 
 // scalatest
 libraryDependencies += "org.scalatest" % "scalatest_2.11" % "3.0.1" % "test"

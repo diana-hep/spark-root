@@ -21,7 +21,12 @@ import org.dianahep.root4j._
 import org.dianahep.root4j.interfaces._
 import sparkroot.ast._
 
+// logging
+import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
+
 package object sparkroot {
+  @transient lazy val logger = LogManager.getLogger("SparkRoot")
+
   /**
    * An impolicit DataFrame Reader
    */
@@ -55,7 +60,6 @@ package object sparkroot {
    * 2. Maps execution of each file to a Tree iterator
    */
   class RootTableScan(path: String, treeName: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan{
-
     // path is either a dir with files or a pathToFile
     private val inputPathFiles = {
       val hPath = new Path(path)
@@ -68,7 +72,7 @@ package object sparkroot {
     private val att: core.SRType = 
     {
       //logger.info("Building the Abstract Schema Tree...")
-      println(s"Building the Abstract Schema Tree... for treeName=$treeName")
+      logger.info(s"Building the Abstract Schema Tree... for treeName=$treeName")
       val reader = new RootFileReader(inputPathFiles head)
 //      val tmp = buildAST(findTree(reader.getTopDir), null, null) 
       val tmp = 
@@ -78,24 +82,24 @@ package object sparkroot {
           buildATT(reader.getKey(treeName).getObject.asInstanceOf[TTree],
             arrangeStreamers(reader), null)
       //logger.info("Done")
-      println("Done")
+      logger.info("Done")
       tmp
     }
 
     // define the schema from the AST
     def schema: StructType = {
       //logger.info("Building the Spark Schema")
-      println("Building the Spark Schema")
+      logger.info("Building the Spark Schema")
       val s = buildSparkSchema(att)
 //      val s = buildSparkSchema(ast)
       //logger.info("Done")
-      println("Done")
+      logger.info("Done")
       s
     }
 
     // builds a scan
     def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-      println("Building Scan")
+      logger.info("Building Scan")
       println(requiredColumns.mkString(" "))
       println(filters)
       val localTreeName = treeName  
@@ -103,20 +107,16 @@ package object sparkroot {
       // parallelize over all the files
       val r = sqlContext.sparkContext.parallelize(inputPathFiles).
         flatMap({pathName =>
-          // TODO: support HDFS (may involve changes to root4j)
+          logger.info(s"Opening file $pathName")
           val reader = new RootFileReader(pathName)
-          // get the TTree
-          // TODO: we could add an option that specificies the TTree...
           val rootTree = 
-//            findTree(reader)
             if (localTreeName == null) findTree(reader)
             else reader.getKey(localTreeName).getObject.asInstanceOf[TTree]
-          // the real work starts here
           new RootTreeIterator(rootTree, arrangeStreamers(reader), 
             requiredColumns, filters)
         })
 
-      println("Done building Scan")
+      logger.info("Done building Scan")
       r
     }
   }
