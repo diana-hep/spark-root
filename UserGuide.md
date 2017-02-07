@@ -22,22 +22,28 @@ All of the test files used/shown are available from the above locations
 - It is assumed that the user confirms to the requirements.
 - std out spark logging might differ based on 2.0 or 2.1 spark versions 
 
-## Example 1
+## Example Higgs -> 2 muons Analysis
+
+First example comes from Higgs to Dimuon Analysis. Since this was the very first test of the ability to process stl containers, we include this example here. ROOT files come from the CMS Higgs Analysis. 
 
 This example contains:
 - STL Containers of Composite Classes
-- Composites with other nested Composites
--  
+- Composites with other nested Composites  
 
 ```
+you start by running spark shell, spark-root is hosted on maven central
 ./spark-shell --packages org.diana-hep:spark-root_2.11:0.1.7
 
+you have to import the implicit ROOT DataFrameReader
 import org.dianahep.sparkroot._
 
+as simple as reading in parquet or avro
 scala> val df = spark.sqlContext.read.root("file:/Users/vk/software/Analysis/files/test/ntuple_drellyan_test.root")
 
+if you want to get the schema
 scala> df.printSchema
 
+simply read in the first few entries
 scala> df.show
 +--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+-------------------+-------------------+--------------------+-------------------+-------------------+
 |               Muons|                Jets|            Vertices|               Event|      EventAuxiliary|                 MET|           Electrons|                Taus|             GenJets|          GenHpreFSR|      Track1HpreFSR|      Track2HpreFSR|         GenHpostFSR|     Track1HpostFSR|     Track2HpostFSR|
@@ -65,6 +71,36 @@ scala> df.show
 +--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+-------------------+-------------------+--------------------+-------------------+-------------------+
 only showing top 20 rows
 
+most basic query - number of "Events" in this file
+scala> df.count
+res2: Long = 1317496
 
-scala>
+scala> df.select("Muons").show
++--------------------+
+|               Muons|
++--------------------+
+|[[[[],-1,58.45683...|
+|[[[[],-1,79.4607,...|
+|[[[[],1,46.150543...|
+|[[[[],1,75.89284,...|
+|[[[[],1,60.506573...|
+|[[[[],1,68.28817,...|
+|[[[[],-1,37.80587...|
+|[[[[],1,23.450613...|
+|[[[[],1,104.45745...|
+|[[[[],1,44.337986...|
+|[[[[],1,102.55752...|
+|[[[[],-1,52.61641...|
+|[[[[],-1,49.11682...|
+|[[[[],-1,51.36520...|
+|[[[[],1,51.510174...|
+|[[[[],-1,754.1653...|
+|[[[[],1,139.81227...|
+|[[[[],-1,23.77856...|
+|[[[[],1,48.584915...|
+|[[[[],1,41.75093,...|
++--------------------+
+only showing top 20 rows
+
+scala> 
 ```
