@@ -104,3 +104,134 @@ only showing top 20 rows
 
 scala> 
 ```
+
+## Example CMSSW MiniAOD
+
+- CMSSW MiniAOD Data Format
+- Reading in Events TTree
+- 99% of branches are readable (there are limitations, but not for most significant physics objects)
+
+```
+asssume up to importing the sparkroot...
+
+note that we specify which tree we would like to parse
+scala> val df = spark.sqlContext.read.option("tree", "Events").root("file:/Users/vk/software/diana-hep/test_data/test_cmssw_miniaod_10000events.root")
+
+the schema is quite large... but worth trying it out
+df.printSchema
+
+scala> df.select(s"patMuons_slimmedMuons__PAT_.patMuons_slimmedMuons__PAT_obj.pat::Lepton<reco::Muon>.pat::PATObject<reco::Muon>.reco::Muon.reco::RecoCandidate.reco::LeafCandidate.m_state.p4Polar_.fCoordinates.fPt").show
++--------------------+                                                          
+|                 fPt|
++--------------------+
+|[3.377681, 1.4403...|
+|[1.5900156, 1.266...|
+|[1.2738085, 1.200...|
+|          [64.71695]|
+|[1.345549, 0.8820...|
+|[2.4810638, 1.177...|
+|[35.60943, 1.6700...|
+|[3.7110734, 1.208...|
+|[46.459988, 20.18...|
+|[38.18723, 1.1263...|
+|[191.29523, 1.110...|
+|          [8.095617]|
+|[114.62588, 16.98...|
+|[4.1249623, 3.027...|
+|                  []|
+|[1.8949968, 0.842...|
+|[6.7620783, 2.492...|
+|[1.4813017, 1.362...|
+|                  []|
+|          [4.471069]|
++--------------------+
+only showing top 20 rows
+
+
+scala> 
+
+you can directly dump all the muons for first 20 entries (as a proof of concept)
+scala> df.select(s"patMuons_slimmedMuons__PAT_.patMuons_slimmedMuons__PAT_obj").show
+patMuons_slimmedMuons__PAT_
+[Lorg.apache.spark.sql.sources.Filter;@52381b6e
++------------------------------+                                                
+|patMuons_slimmedMuons__PAT_obj|
++------------------------------+
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.11...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.09...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.11...|
+|          [[[[[[[[],[[[0.06...|
+|                            []|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.10...|
+|          [[[[[[[[],[[[0.10...|
+|                            []|
+|          [[[[[[[[],[[[0.10...|
++------------------------------+
+only showing top 20 rows
+
+
+scala> 
+```
+
+## Example CMSSW AOD - public Dataset 
+
+We include this example as this is the one that will be used for producing benchmarks.
+It comes from the public CMS dataset from 2010, http://opendata.cern.ch/record/10
+
+Half of the whole dataset (~1.2TB) is available on CERN's hdfs at the location indicated above. 
+
+```
+again, assume the same commands up to importing ROOT DataFrame Reader
+
+Note1: we specify the tree
+Note2: we give a folder that has subfolders,files inside. SPARK-ROOT recursively searches for ROOT files inside of the folder specified.
+scala> val df = spark.sqlContext.read.option("tree", "Events").root("hdfs:/cms/bigdatasci/vkhriste/data/publiccms_muionia_aod")
+
+here is the pt for muons for the first 20 events
+scala> df.select(s"recoMuons_muons__RECO_.recoMuons_muons__RECO_obj.reco::RecoCandidate.reco::LeafCandidate.pt_").show
+recoMuons_muons__RECO_
+[Lorg.apache.spark.sql.sources.Filter;@4e42fa81
++--------------------+
+|                 pt_|
++--------------------+
+|[3.085807, 1.2784...|
+|[4.1558356, 1.025...|
+|[3.8067229, 2.142...|
+|[2.4893947, 1.337...|
+|         [4.5430374]|
+|[3.1356623, 1.431...|
+|[2.1504705, 2.129...|
+|         [3.2125602]|
+|         [4.3416142]|
+|[2.1879413, 0.956...|
+|          [5.258412]|
+|          [5.627528]|
+|[3.8034406, 6.120...|
+|         [2.0771139]|
+|          [3.891133]|
+|          [5.891902]|
+|[2.226252, 3.6012...|
+|         [6.2603984]|
+|         [1.8396659]|
+|[1.7337813, 1.278...|
++--------------------+
+only showing top 20 rows
+
+
+scala> 
+
+let's count the total entries in the TTrees over the whole dataset
+scala> df.count
+res4: Long = 12058887 
+```
