@@ -3,6 +3,8 @@ package org.dianahep.sparkroot.core
 import org.apache.spark.sql.types._
 import org.apache.spark.sql._
 
+import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
+
 import org.dianahep.root4j.core.RootInput
 import org.dianahep.root4j.interfaces._
 
@@ -19,7 +21,7 @@ case object SRCollectionType extends SRTypeTag;
 case object SRCompositeType extends SRTypeTag;
 
 abstract class SRType(val name: String) {
-  protected val debug = System.getProperty("debug") != null;
+  protected lazy val logger = LogManager.getLogger("org.dianahep.sparkroot.core.TypeSystem")
   def debugMe(str: String): Unit
 
   // reuse the same buffer
@@ -47,22 +49,22 @@ abstract class SRCollection(name: String, isTop: Boolean) extends SRType(name) {
 }
 
 case class SRUnknown(override val name: String) extends SRType(name) {
-  override def debugMe(str: String) = println(s"SRUnknown::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRUnknown::$name $str")
 
   override def read(b: RootInput) = { 
-    if (debug) debugMe(s"read(buffer)"); 
+    debugMe(s"read(buffer)"); 
     null
   }
   override def read = { 
-    if (debug) debugMe(s"read"); 
+    debugMe(s"read"); 
     null
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     for (i <- 0 until size) yield null
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     for (i <- 0 until size) yield null
   }
   override def hasNext = false
@@ -70,22 +72,22 @@ case class SRUnknown(override val name: String) extends SRType(name) {
 }
 
 case object SRNull extends SRType("Null") {
-  override def debugMe(str: String) = println(s"SRNull::no name $str")
+  override def debugMe(str: String) = logger.debug(s"SRNull::no name $str")
 
   override def read(b: RootInput) = {
-    if (debug) debugMe("read(buffer)"); 
+    debugMe("read(buffer)"); 
     null
   }
   override def read = { 
-    if (debug) debugMe("read"); 
+    debugMe("read"); 
     null
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     for (i <- 0 until size) yield null
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     for (i <- 0 until size) yield null
   }
   override def hasNext = false
@@ -93,22 +95,22 @@ case object SRNull extends SRType("Null") {
 }
 
 case class SRRoot(override val name: String, var entries: Long, types: Seq[SRType]) extends SRType(name) {
-  override def debugMe(str: String) = println(s"SRRoot::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRRoot::$name $str")
   override def read(b: RootInput) = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     null
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     entries-=1L;
     Row.fromSeq(for (t <- types) yield t.read)
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     null
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     null
   }
   override def hasNext = entries>0
@@ -119,21 +121,21 @@ case class SRRoot(override val name: String, var entries: Long, types: Seq[SRTyp
 }
 case class SREmptyRoot(override val name: String, var entries: Long) 
   extends SRType(name) {
-  override def debugMe(str: String) = println(s"EmptySRRoot::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SREmptyRoot::$name $str")
   override def read(b: RootInput) = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     null
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     entries-=1L;Row()
   }
   override def readArray(b: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     null
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     null
   }
   override def hasNext = entries>0
@@ -142,29 +144,29 @@ case class SREmptyRoot(override val name: String, var entries: Long)
 
 case class SRString(override val name: String, b: TBranch, l: TLeaf) 
   extends SRSimpleType(name, b, l) {
-  override def debugMe(str: String) = println(s"SRString::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRString::$name $str")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     entry+=1L;
     val r = buffer.readString
-    if (debug) debugMe(s"read String=$r")
+    debugMe(s"read String=$r")
     r
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     val buffer = b.setPosition(l, entry)
     val data = buffer.readString
-    if (debug) debugMe(s"read String=$data")
+    debugMe(s"read String=$data")
     entry+=1L
     data
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     entry+=1L;
     for (i <- 0 until size) yield buffer.readString
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     val buffer = b.setPosition(l, entry)
     val data = for (i <- 0 until size) yield buffer.readString
     entry+=1L
@@ -176,29 +178,29 @@ case class SRString(override val name: String, b: TBranch, l: TLeaf)
 
 case class SRShort(override val name: String, b: TBranch, l: TLeaf) 
   extends SRSimpleType(name, b, l) {
-  override def debugMe(str: String) = println(s"SRShort::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRShort::$name $str")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe(s"read(buffer)")
+    debugMe(s"read(buffer)")
     entry+=1L;
     val r = buffer.readShort
-    if (debug) debugMe(s"read Short=$r")
+    debugMe(s"read Short=$r")
     r
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     val buffer = b.setPosition(l, entry)
     val data = buffer.readShort
-    if (debug) debugMe(s"read Short=$data")
+    debugMe(s"read Short=$data")
     entry+=1L
     data
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     entry+=1L
     for (i <- 0 until size) yield buffer.readShort
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     val buffer = b.setPosition(l, entry)
     val data = for (i <- 0 until size) yield buffer.readShort
     entry+=1L
@@ -210,25 +212,25 @@ case class SRShort(override val name: String, b: TBranch, l: TLeaf)
 
 case class SRBoolean(override val name: String, b: TBranch, l: TLeaf) 
   extends SRSimpleType(name, b, l) {
-  override def debugMe(str: String) = println(s"SRBoolean::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRBoolean::$name $str")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     entry+=1L;buffer.readBoolean
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     val buffer = b.setPosition(l, entry)
     val data = buffer.readBoolean
     entry+=1L
     data
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     entry+=1L
     for (i <- 0 until size) yield buffer.readBoolean
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     val buffer = b.setPosition(l, entry)
     val data = for (i <- 0 until size) yield buffer.readBoolean
     entry+=1L
@@ -240,25 +242,25 @@ case class SRBoolean(override val name: String, b: TBranch, l: TLeaf)
 
 case class SRLong(override val name: String, b: TBranch, l: TLeaf) 
   extends SRSimpleType(name, b, l) {
-  override def debugMe(str: String) = println(s"SRLong::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRLong::$name $str")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     entry+=1L;buffer.readLong
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     val buffer = b.setPosition(l, entry)
     val data = buffer.readLong
     entry+=1L
     data
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     entry+=1L
     for (i <- 0 until size) yield buffer.readLong
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     val buffer = b.setPosition(l, entry)
     val data = for (i <- 0 until size) yield buffer.readLong
     entry+=1L
@@ -270,25 +272,25 @@ case class SRLong(override val name: String, b: TBranch, l: TLeaf)
 
 case class SRDouble(override val name: String, b: TBranch, l: TLeaf)
   extends SRSimpleType(name, b, l) {
-  override def debugMe(str: String) = println(s"SRDouble::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRDouble::$name $str")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     entry+=1L; buffer.readDouble
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     val buffer = b.setPosition(l, entry)
     val data = buffer.readDouble
     entry+=1L
     data
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     entry+=1L
     for (i <- 0 until size) yield buffer.readDouble
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     val buffer = b.setPosition(l, entry)
     val data = for (i <- 0 until size) yield buffer.readDouble
     entry+=1L
@@ -300,25 +302,25 @@ case class SRDouble(override val name: String, b: TBranch, l: TLeaf)
 
 case class SRByte(override val name: String, b: TBranch, l: TLeaf) 
   extends SRSimpleType(name, b, l) {
-  override def debugMe(str: String) = println(s"SRByte::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRByte::$name $str")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     entry+=1L;buffer.readByte
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     val buffer = b.setPosition(l, entry)
     val data = buffer.readByte
     entry+=1L
     data
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     entry+=1L
     for (i <- 0 until size) yield buffer.readByte
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     val buffer = b.setPosition(l, entry)
     val data = for (i <- 0 until size) yield buffer.readByte
     entry+=1L
@@ -330,29 +332,29 @@ case class SRByte(override val name: String, b: TBranch, l: TLeaf)
 
 case class SRInt(override val name: String, b: TBranch, l: TLeaf) 
   extends SRSimpleType(name, b, l) {
-  override def debugMe(str: String) = println(s"SRInt::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRInt::$name $str")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe(s"read(buffer)")
+    debugMe(s"read(buffer)")
     entry+=1L;
     val r = buffer.readInt
-    if (debug) debugMe(s"read Int=$r")
+    debugMe(s"read Int=$r")
     r
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     val buffer = b.setPosition(l, entry)
     val data = buffer.readInt
-    if (debug) debugMe(s"read Int=$data")
+    debugMe(s"read Int=$data")
     entry+=1L
     data
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     entry+=1L
     for (i <- 0 until size) yield buffer.readInt
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     val buffer = b.setPosition(l, entry)
     val data = for (i <- 0 until size) yield buffer.readInt
     entry+=1L
@@ -363,29 +365,29 @@ case class SRInt(override val name: String, b: TBranch, l: TLeaf)
 }
 case class SRFloat(override val name: String, b: TBranch, l: TLeaf) 
   extends SRSimpleType(name, b, l) {
-  override def debugMe(str: String) = println(s"SRFloat::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRFloat::$name $str")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe(s"read(buffer)")
+    debugMe(s"read(buffer)")
     entry+=1L;
     val r = buffer.readFloat
-    if (debug) debugMe(s"read Float=$r")
+    debugMe(s"read Float=$r")
     r
   }
   override def read = {
-    if (debug) debugMe(s"read")
+    debugMe(s"read")
     val buffer = b.setPosition(l, entry)
     val data = buffer.readFloat
     entry+=1L
-    if (debug) debugMe(s"read Float=$data")
+    debugMe(s"read Float=$data")
     data
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     entry+=1L
     for (i <- 0 until size) yield buffer.readFloat
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     val buffer = b.setPosition(l, entry)
     val data = for (i <- 0 until size) yield buffer.readFloat
     entry+=1L
@@ -397,9 +399,9 @@ case class SRFloat(override val name: String, b: TBranch, l: TLeaf)
 
 case class SRArray(override val name: String, b: TBranch, l:TLeaf, t: SRType, n: Int) 
   extends SRSimpleType(name, b, l) {
-  override def debugMe(str: String) = println(s"SRArray::$name $str")
+  override def debugMe(str: String) = logger.debug(s"SRArray::$name $str")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     val data = 
       if (n == -1) 
         for (i <- 0 until l.getLeafCount.getWrappedValue(entry).asInstanceOf[Integer]) 
@@ -409,7 +411,7 @@ case class SRArray(override val name: String, b: TBranch, l:TLeaf, t: SRType, n:
     data
   }
   override def read = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     // array is read contiguously - no buffer reassigning
     val buffer = b.setPosition(l, entry)
     val data = 
@@ -426,7 +428,7 @@ case class SRArray(override val name: String, b: TBranch, l:TLeaf, t: SRType, n:
    * @return Seq[Array]
    */
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     val data = for (i <- 0 until size) yield {
       if (n == -1)
         for (j <- 0 until l.getLeafCount.getWrappedValue(entry).asInstanceOf[Integer])
@@ -442,7 +444,7 @@ case class SRArray(override val name: String, b: TBranch, l:TLeaf, t: SRType, n:
    * @return Seq[Array]
    */
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size)")
+    debugMe(s"readArray($size)")
     val buffer = b.setPosition(l, entry)
     val data = for (i <- 0 until size) yield {
       if (n == -1)
@@ -465,9 +467,9 @@ case class SRSTLString(override val name: String,
   b: TBranch,  // branch
   isTop: Boolean) // is it nested inside some other collection? 
   extends SRCollection(name, isTop) {
-  override def debugMe(str: String) = println(s"SRSTLString::$name $str Event=$entry")
+  override def debugMe(str: String) = logger.debug(s"SRSTLString::$name $str Event=$entry")
   override def read(buffer: RootInput) = {
-    if (debug) debugMe("read(buffer)")
+    debugMe("read(buffer)")
     entry+=1L;
     // read the byte count and version
     // only if this guy is not nested into a collection himself
@@ -480,7 +482,7 @@ case class SRSTLString(override val name: String,
     buffer.readString
   }
   override def read = {
-    if (debug) debugMe("read")
+    debugMe("read")
     val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
     // read the byte count and version
     // only if this guy is not nested in another collection, however
@@ -496,7 +498,7 @@ case class SRSTLString(override val name: String,
     data
   }
   override def readArray(buffer: RootInput, size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     entry+=1L;
     // read tehe byte count and version first
     buffer.readInt
@@ -506,7 +508,7 @@ case class SRSTLString(override val name: String,
     for (i <- 0 until size) yield buffer.readString
   }
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray(buffer, $size)")
+    debugMe(s"readArray(buffer, $size)")
     val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
     // reat the byte count and version first
     buffer.readInt; buffer.readShort
@@ -532,7 +534,7 @@ case class SRMap(
   split: Boolean, // does it have subbranches
   isTop: Boolean // is this map nested in another collection?
   ) extends SRCollection(name, isTop) {
-  override def debugMe(str: String) = println(s"SRMap::$name $str Event=$entry")
+  override def debugMe(str: String) = logger.debug(s"SRMap::$name $str Event=$entry")
   // aux constructor where key is the members(0) and members(1) is the value
   def this(name: String, b: TBranchElement, types: SRComposite, split: Boolean,
     isTop: Boolean) = this(name, b, types.members(0), types.members(1), split, isTop)
@@ -543,11 +545,11 @@ case class SRMap(
    */
   override def readArray(buffer: RootInput, size: Int) = {
     if (split) {
-      if (debug) debugMe(s"readArray(buffer, $size) in split mode")
+      debugMe(s"readArray(buffer, $size) in split mode")
       null // assume no splitting for this guy
     }
     else {
-      if (debug) debugMe(s"readArray(buffer, $size) in non-split mode")
+      debugMe(s"readArray(buffer, $size) in non-split mode")
       // as for the vector, read the bytecount and version of the map
       val byteCount = buffer.readInt
       val version = buffer.readShort
@@ -572,7 +574,7 @@ case class SRMap(
    * @return Seq[Map] although it will be Seq[Any] typewise
    */
   override def readArray(size: Int) = {
-    if (debug) debugMe(s"readArray($size) calls readArray(buffer, $size)")
+    debugMe(s"readArray($size) calls readArray(buffer, $size)")
     val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
     readArray(buffer, size)
   }
@@ -583,7 +585,7 @@ case class SRMap(
    */
   override def read = 
     if (split) {
-      if (debug) debugMe(s"read in split mode")
+      debugMe(s"read in split mode")
       // current collection has subbranches - this must be an STL node
       // don't check for isTop - a split one must be top
       val leaf = b.getLeaves.get(0).asInstanceOf[TLeaf]
@@ -596,7 +598,7 @@ case class SRMap(
       null
     }
     else {
-      if (debug) debugMe(s"read in non-split mode")
+      debugMe(s"read in non-split mode")
       // this map collection does not have subbranches.
       // we are the top level of collection nestedness - 
       //  nested collections will always pass the buffer
@@ -649,13 +651,13 @@ case class SRMap(
   */
   override def read(buffer: RootInput) = 
     if (split) {
-      if (debug) debugMe("read(buffer) in split mode")
+      debugMe("read(buffer) in split mode")
       // there are subbranches and we are passed a buffer
       // TODO: Do we have such cases???
       null
     }
     else {
-      if (debug) debugMe("read(buffer) in non-split mode")
+      debugMe("read(buffer) in non-split mode")
       // collection inside of something as the buffer has been passed
       // for the collection of top level read the version first
       // NOTE: we must know if this is the top collection or not.
@@ -721,7 +723,7 @@ case class SRVector(
   split: Boolean, // does it have subbranches
   isTop: Boolean // is this vector nested in another collection?
   ) extends SRCollection(name, isTop) {
-  override def debugMe(str: String) = println(s"SRVector::$name $str Event=$entry")
+  override def debugMe(str: String) = logger.debug(s"SRVector::$name $str Event=$entry")
 
   /**
    * explicitly request to read an array of type Vector
@@ -735,11 +737,11 @@ case class SRVector(
     //
 
     if (split) {
-      if (debug) debugMe(s"readArray(buffer, $size) in split mode")
+      debugMe(s"readArray(buffer, $size) in split mode")
       null // assume no splitting for this guy
     }
     else {
-      if (debug) debugMe(s"readArray(buffer, $size) in non-split mode")
+      debugMe(s"readArray(buffer, $size) in non-split mode")
       val byteCount = buffer.readInt
       val version = buffer.readShort
       if ((version & kMemberWiseStreaming) > 0) {
@@ -771,7 +773,7 @@ case class SRVector(
         // objectwise streaming
         val data = for (i <- 0 until size) yield {
           val nn = buffer.readInt
-          if (debug) debugMe(s"readArray(buffer, $size) object-wise current $nn")
+          debugMe(s"readArray(buffer, $size) object-wise current $nn")
           for (j <- 0 until nn) yield t.read(buffer)
         }
         entry += 1L
@@ -793,7 +795,7 @@ case class SRVector(
     // Therefore we simply assign the buffer for this branch and call 
     // readArray(buffer,..).
     //
-    if (debug) debugMe(s"readArray($size) calls readArray(buffer, $size)")
+    debugMe(s"readArray($size) calls readArray(buffer, $size)")
     val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
     readArray(buffer, size)
   }
@@ -804,7 +806,7 @@ case class SRVector(
    */
   override def read = 
     if (split) {
-      if (debug) debugMe(s"read in split mode")
+      debugMe(s"read in split mode")
       // current collection has subbranches - this must be an STL node
       // don't check for isTop - a split one must be top
       val leaf = b.getLeaves.get(0).asInstanceOf[TLeaf]
@@ -831,7 +833,7 @@ case class SRVector(
       data
     }
     else {
-      if (debug) debugMe(s"read in non-split mode")
+      debugMe(s"read in non-split mode")
       // this vector collection does not have subbranches.
       // we are the top level of vector nestedness - 
       //  nested collections will always pass the buffer
@@ -878,7 +880,7 @@ case class SRVector(
       else {
         // get the size
         val size = buffer.readInt
-
+        logger.debug(s"read in non-split mode object-wise $size")
         entry += 1L;
         for (i <- 0 until size) yield t.read(buffer)
       }
@@ -891,11 +893,11 @@ case class SRVector(
     if (split) {
       // there are subbranches and we are passed a buffer
       // TODO: Do we have such cases???
-      if (debug) debugMe(s"read(buffer) in split mode")
+      debugMe(s"read(buffer) in split mode")
       null
     }
     else {
-      if (debug) debugMe(s"read(buffer) in non-split mode")
+      debugMe(s"read(buffer) in non-split mode")
       // vector collection inside of something as the buffer has been passed
       // for the vector of top level read the version first
       // NOTE: we must know if this is the top collection or not.
@@ -938,7 +940,7 @@ case class SRVector(
         else {
           // object wise streaming
           val size = buffer.readInt
-          if (debug) debugMe(s"read(buffer) in object-wise mode $size as TOP")
+          debugMe(s"read(buffer) in object-wise mode $size as TOP")
           entry += 1L;
           for (i <- 0 until size) yield t.read(buffer)
         }
@@ -946,7 +948,7 @@ case class SRVector(
       else {
         // just read the size and object-wise raeding of all elements
         val size = buffer.readInt
-        if (debug) debugMe(s"read(buffer) in object-wise mode $size as _not_ TOP")
+        debugMe(s"read(buffer) in object-wise mode $size as _not_ TOP")
         entry += 1L;
         for (i <- 0 until size) yield t.read(buffer)
       }
@@ -968,7 +970,7 @@ case class SRComposite(
   isBase: Boolean = false // is this composite a base class or not
   ) extends SRType(name) {
 
-  override def debugMe(str: String) = println(s"SRComposite::$name $str Event=$entry")
+  override def debugMe(str: String) = logger.debug(s"SRComposite::$name $str Event=$entry")
   override def readArray(size: Int) = {
     // 
     // This will happen when we have a composite inside 
@@ -977,7 +979,7 @@ case class SRComposite(
     //
 
     if (split) {
-      if (debug) debugMe(s"readArray($size) in split mode")
+      debugMe(s"readArray($size) in split mode")
       // if this is split - simply pass to members
       // basically this composite is HOLLOW!
       val data = 
@@ -990,7 +992,7 @@ case class SRComposite(
       data
     }
     else {
-      if (debug) debugMe(s"readArray($size) in non-split mode calls readArray(buffer, $size)")
+      debugMe(s"readArray($size) in non-split mode calls readArray(buffer, $size)")
       // this is not splittable - so we must assign the buffer and read
       val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
       readArray(buffer, size)
@@ -1000,7 +1002,7 @@ case class SRComposite(
   // this is for memberwise reading
   override def readArray(buffer: RootInput, size: Int) = {
     if (isBase) {
-      if (debug) debugMe(s"readArray(buffer, $size) in isBase mode")
+      debugMe(s"readArray(buffer, $size) in isBase mode")
       // this guy is hollow  we just pass -> typically for BASE classes
       val data = 
         if (members.size == 0)
@@ -1012,7 +1014,7 @@ case class SRComposite(
       data
     }
     else {
-      if (debug) debugMe(s"readArray(buffer, $size) in non-base mode")
+      debugMe(s"readArray(buffer, $size) in non-base mode")
       // this guy is not hollow - typically for composites that are not BASE
       // when there is no splitting
       val data = for (i <- 0 until size) yield {
@@ -1042,14 +1044,14 @@ case class SRComposite(
    */
   override def read: Any = 
     if (split) {
-      if (debug) debugMe(s"read in split mode")
+      debugMe(s"read in split mode")
       // split class -- just pass the call to members
       // do not have to read the header information
       entry+=1L
       Row.fromSeq(for (m <- members) yield m.read)
     }
     else {
-      if (debug) debugMe(s"read in non-split mode")
+      debugMe(s"read in non-split mode")
       // composite is not split into subbranches for members
       // get the buffer
       // if this composite is empty and has its own branch, nothing to read.
@@ -1085,7 +1087,7 @@ case class SRComposite(
    * reading by reusing the buffer
    */
   override def read(buffer: RootInput) = {
-    if (debug) debugMe(s"read(buffer)")
+    debugMe(s"read(buffer)")
     // not a top branch
     // can not be split - composite that receive the buffer are contiguous
 

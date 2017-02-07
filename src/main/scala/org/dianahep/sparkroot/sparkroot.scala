@@ -13,7 +13,7 @@ import org.apache.spark.sql.sources.RelationProvider
 import org.apache.spark.sql.types._
 
 // hadoop hdfs 
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{Path, FileSystem, PathFilter}
 
 // sparkroot or root4j
 import org.dianahep.root4j.core.RootInput
@@ -62,9 +62,19 @@ package object sparkroot {
   class RootTableScan(path: String, treeName: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan{
     // path is either a dir with files or a pathToFile
     private val inputPathFiles = {
+      val pathFilter = new PathFilter() {
+        def accept(ppp: Path): Boolean = 
+          ppp.getName.endsWith(".root")
+      }
       val hPath = new Path(path)
       val fs = hPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-      fs.listStatus(hPath).map(_.getPath.toString)
+      def iterate(p: Path): Seq[String] = 
+        if (fs.isDirectory(p))
+          fs.listStatus(p).flatMap(x => iterate(x.getPath))
+        else 
+          Seq(p.toString)
+
+      iterate(hPath).filter(x => pathFilter.accept(new Path(x)))
     }
     
     // create the abstract tree
