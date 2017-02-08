@@ -19,7 +19,7 @@ is available on hdfs at CERN.
 All of the test files used/shown are available from the above locations
 
 ## Instructions
-- It is assumed that the user confirms to the requirements.
+- It is assumed that the user conforms to the requirements.
 - std out spark logging might differ based on 2.0 or 2.1 spark versions 
 
 ## Example Higgs -> 2 muons Analysis
