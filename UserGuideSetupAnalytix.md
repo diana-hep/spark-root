@@ -33,7 +33,7 @@ Otherwise, you can use currently available settings
 - source hadoop-confext/hadoop-setconf.sh analytix
 
 ### Current hdfs Settings
-- source /afs/cern.ch/work/v/vkhriste/public/spark-root-testdata/hadoop-confext/hadoop-setconf.sh
+- source /afs/cern.ch/work/v/vkhriste/public/spark-root-testdata/hadoop-confext/hadoop-setconf.sh analytix
 
 ## Step 3: Kerberize
 - kinit
