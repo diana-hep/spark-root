@@ -31,6 +31,7 @@ Otherwise, you can use currently available settings
 - copy /afs/cern.ch/work/v/vkhriste/public/spark-root-testdata/hadoop-confext.tar.gz to whever you feel convenient (**temporary, current analytix config is throwing errors on reading**)
 - tar -zxvf hadoop-confext.tar.gz
 - source hadoop-confext/hadoop-setconf.sh analytix
+
 ### Current hdfs Settings
 - source /afs/cern.ch/work/v/vkhriste/public/spark-root-testdata/hadoop-confext/hadoop-setconf.sh
 
