@@ -44,7 +44,7 @@ Otherwise, you can use currently available settings
 - unset PYSPARK\_DRIVER\_PYTHON
 
 ## Step 5.1 Spark Scala Shell
-- spark-shell --master yarn --num-executors 30 --executor-cores 4 --packages org.diana-hep:spark-root\_2.11:0.1.7 spark.dynamicAllocation.enabled=false
+- spark-shell --master yarn --num-executors 30 --executor-cores 4 --packages org.diana-hep:spark-root\_2.11:0.1.7 --conf spark.dynamicAllocation.enabled=false
 - num-executors - sets up the number of worker nodes
 - executor-cores - sets up the number of cores/threads
 - packages - enable additional packages(pulled from maven central or those that you compiled locally)
