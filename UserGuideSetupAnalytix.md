@@ -58,3 +58,9 @@ Otherwise, you can use currently available settings
 ### Running pyspark
 - command below will launch pyspark and print the url for you to access the jupyter notebooks.
 - pyspark --packages org.diana-hep:spark-root\_2.11:0.1.7 --conf spark.dynamicAllocation.enabled=false --executor-cores 4 --num-executors 60 --master yarn
+
+## Optional
+### Histogrammar
+- temporary including histogrammar on the driver and executor's side
+- export PYTHONPATH=$PYTHONPATH:/afs/cern.ch/user/v/vkhriste/public/histogrammar-1.0.6
+- pyspark --packages org.diana-hep:spark-root\_2.11:0.1.7 --conf spark.dynamicAllocation.enabled=false --executor-cores 4 --num-executors 60 --master yarn --py-files /afs/cern.ch/user/v/vkhriste/public/histogrammar-1.0.6.zip

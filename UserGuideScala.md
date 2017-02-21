@@ -6,6 +6,7 @@
 - Apache Spark 2.0 and above
 - Scala 2.11
 - hdfs 
+- if running on CERN Analytix, please follow [User Guide for Analytix Setup][https://github.com/diana-hep/spark-root/blob/master/UserGuideSetupAnalytix.md] first
 
 Comment: hdfs is required for now even for local testing. The ROOT file can reside on local system, hdfs will fall back on local file system if you specify the proper redirector(URI) file:/path/to/file. This requirement will be lifted in later versions
 
@@ -32,7 +33,7 @@ This example contains:
 
 ```
 you start by running spark shell, spark-root is hosted on maven central
-./spark-shell --packages org.diana-hep:spark-root_2.11:0.1.7
+spark-shell --packages org.diana-hep:spark-root_2.11:0.1.7
 
 you have to import the implicit ROOT DataFrameReader
 import org.dianahep.sparkroot._
