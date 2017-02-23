@@ -24,9 +24,20 @@ Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/)
 - STL Collections of Composites with STL Collection of Composite as class member
 - TClonesArray of objects derived from TObject, when TClonesArray occupies its own branch (all cases are in development)
 
-## Currently not Supported Features
-- Pointers to objects and basic types have not been treated currently.
-- Collections of TObject-derived classes is not yet supported (but can be and will be added shortly!)
+## Current Limitations
+- Collection of pointers to some classes (base classes!) will not get properly treated! **We stress, we can read such collections/objects - the problem is how to properly nest it into spark's types **
+```
+class Base {...};
+class Derived1 : public Base {...};
+class Derived2 : public Base {...};
+
+std::vector<Base*> - at read/run-time can be ...
+    1) std::vector<Derived1>
+    2) std::vector<Derived2>
+    3) std::vector<Base>
+
+Same idea applies to TClonesArray.
+```
 
 ## Requirements
 - Apache Spark 2.0.
