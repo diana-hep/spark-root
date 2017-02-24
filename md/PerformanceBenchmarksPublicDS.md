@@ -7,8 +7,10 @@ recoMuons_muons__RECO_
 recoMuons_muonsFromCosmics1Leg__RECO_ 
 recoMuons_muonsFromCosmics__RECO_
 ```
-- Photons as ```recoPhotons_photons__RECO_```
-- Electrons as ```recoGsfElectrons_gsfElectrons__RECO_```
+- Photons as 
+```recoPhotons_photons__RECO_```
+- Electrons as 
+```recoGsfElectrons_gsfElectrons__RECO_```
 - PFTaus as 
 ```
 recoPFTaus_shrinkingConePFTauProducer__RECO_
