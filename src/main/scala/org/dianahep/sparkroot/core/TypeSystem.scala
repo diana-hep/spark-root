@@ -526,6 +526,203 @@ case class SRSTLString(override val name: String,
  * STL Vector Representation
  * TODO: Do we have MemberWise Streaming for a map???
  */
+case class SRMultiMap(
+  override val name: String, // actual name if branch is null
+  b: TBranchElement, // branch to read from... 
+  keyType: SRType, // key type
+  valueType: SRType, // value type
+  split: Boolean, // does it have subbranches
+  isTop: Boolean // is this map nested in another collection?
+  ) extends SRCollection(name, isTop) {
+  override def debugMe(str: String) = logger.debug(
+    s"SRMultiMap::$name $str Event=$entry")
+  // aux constructor where key is the members(0) and members(1) is the value
+  def this(name: String, b: TBranchElement, types: SRComposite, split: Boolean,
+    isTop: Boolean) = this(name, b, types.members(0), types.members(1), split, isTop)
+
+  /**
+   * explicitly request to read an array of type Map
+   * @return Seq[Map] although it will be Seq[Any] typewise
+   */
+  override def readArray(buffer: RootInput, size: Int) = {
+    if (split) {
+      debugMe(s"readArray(buffer, $size) in split mode")
+      null // assume no splitting for this guy
+    }
+    else {
+      debugMe(s"readArray(buffer, $size) in non-split mode")
+      // as for the vector, read the bytecount and version of the map
+      val byteCount = buffer.readInt
+      val version = buffer.readShort
+
+      if ((version & kMemberWiseStreaming) > 0) {
+        null
+      }
+      else {
+        // object wise streaming
+        val data = for (i <- 0 until size) yield {
+          val nn = buffer.readInt
+          // 
+          // NOTE: this is a multi map: Map[K, List[V]]
+          //
+          (for (j <- 0 until nn) yield (keyType.read(buffer), valueType.read(buffer)))
+            .groupBy(_._1).mapValues(_.unzip._2)
+        }
+        entry+=1
+        data
+      }
+    }
+  }
+
+  /**
+   * explicitly request to read an array of type Map
+   * @return Seq[Map] although it will be Seq[Any] typewise
+   */
+  override def readArray(size: Int) = {
+    debugMe(s"readArray($size) calls readArray(buffer, $size)")
+    val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeafElement], entry)
+    readArray(buffer, size)
+  }
+
+  /** 
+   * reading by assigning the buffer - we own the branch
+   * @return the map of SRType
+   */
+  override def read = 
+    if (split) {
+      debugMe(s"read in split mode")
+      // current collection has subbranches - this must be an STL node
+      // don't check for isTop - a split one must be top
+      val leaf = b.getLeaves.get(0).asInstanceOf[TLeaf]
+      val buffer = b.setPosition(leaf, entry)
+
+      // for a split collection - size is in the collection leaf node
+      val size = buffer.readInt
+
+      // SLT Map never shows up as splittable
+      null
+    }
+    else {
+      debugMe(s"read in non-split mode")
+      // this map collection does not have subbranches.
+      // we are the top level of collection nestedness - 
+      //  nested collections will always pass the buffer
+      // composite can call w/o passing the buffer.
+      //
+      // 1. assign the buffer
+      val buffer = b.setPosition(b.getLeaves.get(0).asInstanceOf[TLeaf], entry)
+
+      // read the byte count, version
+      val byteCount = buffer.readInt
+      val version = buffer.readShort
+
+      // check if the version has BIT(14) on - memberwise streaming
+      if ((version & kMemberWiseStreaming)>0) {
+        null
+        /*
+        // memberwise streaming
+        // assume we have some composite inside
+        val composite = t.asInstanceOf[SRComposite]
+
+        // member Version
+        val memberVersion = buffer.readShort
+        // if 0 - read checksum
+        if (memberVersion == 0) buffer.readInt
+
+        // now read the size of the vector
+        val size = buffer.readInt
+
+        // have to transpose
+        entry += 1L;
+        (for (x <- composite.members)
+          yield for (i <- 0 until size) yield x.read(buffer)).transpose
+        */
+      }
+      else {
+        // memberwise straeming
+
+        // get the size
+        val size = buffer.readInt
+
+        // read
+        entry += 1L;
+        (for (i <- 0 until size) yield (keyType.read(buffer), 
+          valueType.read(buffer))).groupBy(_._1).mapValues(_.unzip._2)
+      }
+    }
+
+  /**
+  * reading by reusing the buffer passed
+  */
+  override def read(buffer: RootInput) = 
+    if (split) {
+      debugMe("read(buffer) in split mode")
+      // there are subbranches and we are passed a buffer
+      // TODO: Do we have such cases???
+      null
+    }
+    else {
+      debugMe("read(buffer) in non-split mode")
+      // collection inside of something as the buffer has been passed
+      // for the collection of top level read the version first
+      // NOTE: we must know if this is the top collection or not.
+      // -> If it is, then we do read the version and check the streaming type
+      // -> else, this is a nested collection - we do not read the header and assume
+      //  that reading is done object-wise
+      //
+      // 1. read the size
+      // 2. pass the buffer downstream for reading. 
+      if (isTop) { 
+        val byteCount = buffer.readInt
+        val version = buffer.readShort
+
+        if ((version & kMemberWiseStreaming)>0) {
+          /*
+          // memberwise streaming
+          // assume we have a composite
+          val composite = t.asInstanceOf[SRComposite]
+
+          // memeberVersion
+          val memberVersion = buffer.readShort
+          // if 0 - read checksum
+          if (memberVersion == 0) buffer.readInt
+
+          // size 
+          val size = buffer.readInt
+
+          // have to transpose
+          entry += 1L;
+          (for (x <- composite.members)
+            yield for (i <- 0 until size) yield x.read(buffer)).transpose
+          */
+         null
+        }
+        else {
+          // object wise streaming
+          val size = buffer.readInt
+          entry += 1L;
+          (for (i <- 0 until size) yield (keyType.read(buffer), 
+            valueType.read(buffer))).groupBy(_._1).mapValues(_.unzip._2)
+        }
+      }
+      else {
+        // just read the size and object-wise raeding of all elements
+        val size = buffer.readInt
+        entry += 1L;
+        (for (i <- 0 until size) yield (keyType.read(buffer),
+          valueType.read(buffer))).groupBy(_._1).mapValues(_.unzip._2)
+      }
+    }
+
+  override def hasNext = entry<b.getEntries
+  override val toSparkType = MapType(keyType.toSparkType, 
+    ArrayType(valueType.toSparkType))
+}
+
+/**
+ * STL Vector Representation
+ * TODO: Do we have MemberWise Streaming for a map???
+ */
 case class SRMap(
   override val name: String, // actual name if branch is null
   b: TBranchElement, // branch to read from... 

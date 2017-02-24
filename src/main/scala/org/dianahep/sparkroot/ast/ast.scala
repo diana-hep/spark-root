@@ -11,7 +11,7 @@ import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 
 package object ast
 {
-  private lazy val logger = LogManager.getLogger("org.dianahep.sparkroot.core.TypeSystem") 
+  private lazy val logger = LogManager.getLogger("org.dianahep.sparkroot.core.ast") 
 
   /*
    * LeafInfo - simple TLeaf info
@@ -506,6 +506,31 @@ package object ast
     }
 
     /**
+     * @return - list of template arguments
+     * c++ Template Parenthesis balancing
+     */
+    def extractTemplateArguments(fullTemplateString: String): Seq[String] = {
+      def iterate(n: Int, from: Integer, 
+                  currentPos: Integer, acc: Seq[String]): Seq[String] = 
+        if (currentPos==fullTemplateString.length)
+          acc :+ fullTemplateString.substring(from)
+        else if (fullTemplateString(currentPos)==',')
+          if (n==0) // only if parenthesese are balanaced
+            iterate(0, currentPos+1, currentPos+1, 
+              acc:+fullTemplateString.substring(from, currentPos))
+          else 
+            iterate(n, from, currentPos+1, acc)
+        else if (fullTemplateString(currentPos)=='<')
+          iterate(n+1, from, currentPos+1, acc)
+        else if (fullTemplateString(currentPos)=='>')
+          iterate(n-1, from, currentPos+1, acc)
+        else
+          iterate(n, from, currentPos+1, acc)
+
+      iterate(0, 0, 0, Seq[String]())
+    }
+
+    /**
      * @return the full type definition from known types
      *
      * assumptions: no TStreamerInfo for the class itself
@@ -578,20 +603,24 @@ package object ast
           // we have something that is vector like
           // arguments must be a single typename
           // 1. check if it's a basic type name
+          val templateArguments = extractTemplateArguments(argumentsTypeString)
+          val valueTypeName = 
+            if (templateArguments.length>0) templateArguments(0)
+            else argumentsTypeString
           val streamerInfo = streamers.applyOrElse(
-            formatNameForPointer(argumentsTypeString),
+            formatNameForPointer(valueTypeName),
             (x: String) => null)
           val valueType = 
             if (streamerInfo == null) {
               // no streamer info for value type
               // is it a basic type
               // else synthesize the name again
-              val basicType = synthesizeBasicTypeName(argumentsTypeString)
+              val basicType = synthesizeBasicTypeName(valueTypeName)
               if (basicType == core.SRNull)
                 // not a basic type
                 // can not be composite class - must have a TStreamerInfo
                 // should be some STL - nested => no subbranching
-                synthesizeClassName(argumentsTypeString, null,
+                synthesizeClassName(valueTypeName, null,
                   core.SRCollectionType) 
               else basicType
             }
@@ -623,24 +652,33 @@ package object ast
           // we have something that is map like
           // extract the key/value type names
           logger.debug(s"Synthesizing the current class arguments: ${classTypeString}")
-          val mapTemplateRE = "(.*?),(.*?)".r
-          val (keyTypeString, valueTypeString) = argumentsTypeString match {
-            case mapTemplateRE(aaa,bbb) => (aaa,bbb)
-            case _ => (null, null)
-          }
+          val isMulti = classTypeString.contains("multi")
+          val templateArguments = extractTemplateArguments(argumentsTypeString)
+          val keyTypeString = 
+            if (templateArguments.length>=2) templateArguments(0)
+            else null
+          val valueTypeString = 
+            if (templateArguments.length>=2) templateArguments(1)
+            else null
 
           // if there is a matching issue - assign null
           if (keyTypeString==null || valueTypeString==null) return core.SRNull
 
-          // check first if it is a basic type
-          // if not send to be synthesized
-          // TODO: For now, asssume either custom streamers or basic type
-          // therefore we send it with null for the branch!
+          // retrieve the key Type
+          val keyStreamerInfo = streamers.applyOrElse(
+            formatNameForPointer(keyTypeString),
+            (x: String) => null)
           val keyType = 
-            if (synthesizeBasicTypeName(keyTypeString) == core.SRNull) 
-              synthesizeClassName(keyTypeString, null, core.SRCollectionType)
+            if (keyStreamerInfo == null) {
+              // no streamer info
+              if (synthesizeBasicTypeName(keyTypeString) == core.SRNull) 
+                synthesizeClassName(keyTypeString, null, core.SRCollectionType)
+              else
+                synthesizeBasicTypeName(keyTypeString)
+            }
             else
-              synthesizeBasicTypeName(keyTypeString)
+              synthesizeStreamerInfo(null, keyStreamerInfo, null,
+                core.SRCollectionType)
 
           // value type
           val streamerInfo = streamers.applyOrElse(
@@ -658,38 +696,58 @@ package object ast
                   core.SRCollectionType) 
               else basicType
             }
-            else {
+            else
               // there is a TStreamerInfo
               synthesizeStreamerInfo(b, streamerInfo, null,
                 core.SRCollectionType)
-            }
 
           // TODO: we need to do each collection separately???
           // that is only the case when we have version for each STL separately read in
           if (b==null) 
             parentType match {
               // this is not the top collection
-              case core.SRCollectionType => new core.SRMap("", b, keyType,
-                valueType, false, false)
+              case core.SRCollectionType => 
+                if (isMulti)
+                  new core.SRMultiMap("", b, keyType,
+                    valueType, false, false)
+                else
+                  new core.SRMap("", b, keyType,
+                    valueType, false, false)
               // this is the top collection
-              case _ => new core.SRMap("", b, keyType, valueType, false, true)
+              case _ => 
+                if (isMulti)
+                  new core.SRMultiMap("", b, keyType, valueType, false, true)
+                else
+                  new core.SRMap("", b, keyType, valueType, false, true)
             }
           else
             parentType match {
-              case core.SRCollectionType => new core.SRMap(b.getName, b, keyType,
-                valueType, false, false)
+              case core.SRCollectionType => 
+                if (isMulti)
+                  new core.SRMultiMap(b.getName, b, keyType,
+                    valueType, false, false)
+                else
+                  new core.SRMap(b.getName, b, keyType,
+                    valueType, false, false)
               // if there are multiple sub branches of this guy - it's split
-              case _ => new core.SRMap(b.getName, b, keyType, valueType,
-                if (b.getBranches.size==0) false else true, true)
+              case _ => 
+                if (isMulti)
+                  new core.SRMultiMap(b.getName, b, keyType, valueType,
+                    if (b.getBranches.size==0) false else true, true)
+                else
+                  new core.SRMap(b.getName, b, keyType, valueType,
+                    if (b.getBranches.size==0) false else true, true)
             }
         }
         case it if it == stlPair => {
           // pair is considered to be the composite
-          val pairTemplateRE = "(.*?),(.*?)".r
-          val (firstTypeString, secondTypeString) = argumentsTypeString match {
-            case pairTemplateRE(aaa,bbb) => (aaa,bbb)
-            case _ => (null, null)
-          }
+          val templateArguments = extractTemplateArguments(argumentsTypeString)
+          val firstTypeString = 
+            if (templateArguments.length==2) templateArguments(0)
+            else null
+          val secondTypeString = 
+            if (templateArguments.length==2) templateArguments(1)
+            else null
 
           logger.debug(s"We got a pair: first=$firstTypeString second=$secondTypeString")
 
@@ -786,7 +844,7 @@ package object ast
       parentType: core.SRTypeTag
     ): core.SRType = {
       // debugging...
-      logger.debug(s"TStreamer STL for type: ${streamerSTL.getTypeName}")
+      logger.debug(s"TStreamer STL for typeName: ${streamerSTL.getTypeName} and type=${streamerSTL.getSTLtype}")
 
       // parse by the stl type
       streamerSTL.getSTLtype match {
@@ -841,6 +899,16 @@ package object ast
               case _ => core.SRVector(b.getName, b, t,
                 if (b.getBranches.size==0) false else true, true)
             }
+        }
+        case 6 => { // std::set.... TODO: why multimap appears as 6???
+          logger.debug(s"Found type=6 ${streamerSTL.getTypeName}")
+          synthesizeClassName(streamerSTL.getTypeName,
+            b, parentType)
+        }
+        case 5 => { // std::multimap
+          logger.debug(s"Found type=5 ${streamerSTL.getTypeName}")
+          synthesizeClassName(streamerSTL.getTypeName,
+            b, parentType)
         }
         case 4 => { // std::map
           synthesizeClassName(streamerSTL.getTypeName,
