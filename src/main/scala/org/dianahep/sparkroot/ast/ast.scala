@@ -1022,6 +1022,17 @@ package object ast
 
       logger.debug(s"Starting StreamerInfo synthesis: ${streamerInfo.getName} numElems=${streamerInfo.getElements.size}")
       val elements = streamerInfo.getElements
+      //
+      // TODO: This has to be fixed properly!
+      // check the recursitivity. For now a simple check...
+      //
+      for (i <- 0 until elements.size; x=elements.get(i).asInstanceOf[TStreamerElement]; 
+        typeName=x.getTypeName) 
+        if (typeName==s"vector<${streamerInfo.getName}>" ||
+            typeName==s"${streamerInfo.getName}*")
+          return core.SRNull
+
+      // regular sequence of synthesis
       if (elements.size==0) // that is some empty class
         core.SRComposite(
           if (streamerElement!=null) streamerElement.getName else s"${streamerInfo.getName}", 

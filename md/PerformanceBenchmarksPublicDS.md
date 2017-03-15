@@ -2,11 +2,14 @@
 Description of objects and operations/queries performed for benchmarking
 
 ## List of Queries/Operations performed
-### Dataframe style
-- count
+### Dataframe/Dataset style
+- Dataset[Row] Action: count 
+- Dataset[Row] Action: reduce (func=max/sum/min) on fields {pt, eta, phi}
 - 
-### Dataset style
+
+
 ### RDD style
+- 
 
 ## List of Objects used
 Most-widely used and most important Physics Objects are used.

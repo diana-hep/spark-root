@@ -4,7 +4,7 @@ organization := "org.diana-hep"
 
 licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
 
-version := "0.1.8"
+version := "0.1.9"
 //isSnapshot := true
 
 scalaVersion := "2.11.8"
@@ -16,7 +16,7 @@ sparkVersion := "2.0.0"
 sparkComponents := Seq("sql")
 
 resolvers += Resolver.mavenLocal
-libraryDependencies += "org.diana-hep" % "root4j" % "0.1.5"
+libraryDependencies += "org.diana-hep" % "root4j" % "0.1.6"
 
 // publishing to Maven
 publishMavenStyle := true
