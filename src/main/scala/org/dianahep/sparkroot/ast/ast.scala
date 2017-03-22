@@ -429,7 +429,13 @@ package object ast
           val streamerInfo = streamers.applyOrElse(
             formatNameForPointer(streamerElement.getTypeName),
             (x: String) => null)
-          if (streamerInfo==null) core.SRUnknown(streamerElement.getName)
+          if (streamerInfo==null) {
+            val isCustom = customStreamers.applyOrElse(
+              formatNameForPointer(streamerElement.getTypeName), 
+              (x: String) => core.SRNull)
+            if (isCustom != core.SRNull) isCustom
+            else core.SRUnknown(streamerElement.getName)
+          }
           else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
         }
 
@@ -1737,6 +1743,16 @@ package object ast
     "trigger::TriggerObjectType" -> core.SRInt("", null, null),
     "reco::Muon::MuonTrackType" -> core.SRInt("", null, null),
     "pat::IsolationKeys" -> core.SRInt("", null, null),
-    "reco::IsoDeposit" -> core.SRInt("", null, null)
+    "reco::IsoDeposit" -> core.SRInt("", null, null),
+    "edm::RefCoreWithIndex" -> core.SRComposite("product_",
+      null, 
+      Seq(
+        core.SRShort("f1", null, null),
+        core.SRShort("f2", null, null),
+        core.SRInt("f3", null, null),
+        core.SRShort("f4", null, null)
+      ),
+      false, false, false
+    )
   )
 }
