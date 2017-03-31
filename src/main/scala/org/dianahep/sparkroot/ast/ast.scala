@@ -1686,6 +1686,19 @@ package object ast
   def findTree(dir: TDirectory): TTree = // find the Tree
   {
     for (i <- 0 until dir.nKeys) {
+      val key = dir.getKey(i).asInstanceOf[TKey]
+      if (key.getObjectClass.getClassName == "TDirectory")
+        return findTree(key.getObject.asInstanceOf[TDirectory])
+      else if (key.getObjectClass.getClassName == "TTree") 
+          return key.getObject.asInstanceOf[TTree]
+      
+          
+        /*  
+          {
+        if (key.getObjectClass.getClassName == "TDirectory")
+          return findTree(key.getObject.asInstanceOf[TDirectory])
+        else if (key.getObjectClass.getClassName == "TTree")
+          return key.getObject.asInstanceOf[TTree]
       val obj = dir.getKey(i).getObject.asInstanceOf[AbstractRootObject]
       if (obj.getRootClass.getClassName == "TDirectory" ||
         obj.getRootClass.getClassName == "TTree") 
@@ -1695,6 +1708,7 @@ package object ast
         else (obj.getRootClass.getClassName == "TTree")
         return obj.asInstanceOf[TTree]
       }
+      */
     }
     null
   }
