@@ -216,30 +216,41 @@ package object ast
     requiredColumns: Array[String]
   ): core.SRType = {
 
-    def synthesizeLeafType(b: TBranch, leaf: TLeaf): core.SRType = 
+    def synthesizeLeafType(b: TBranch, leaf: TLeaf): core.SRType = {
+      // TODO: this is a hack!!! Naming Conventions should be identified properly!!!
+      // nameToUse should be fixed!
+      val nameToUse = if (b.getLeaves.size==1) b.getName else leaf.getName
       leaf.getRootClass.getClassName.last match {
-        case 'C' => core.SRString(leaf.getName, b, leaf)
-        case 'B' => core.SRByte(leaf.getName, b, leaf)
-        case 'b' => core.SRByte(leaf.getName, b, leaf)
-        case 'S' => core.SRShort(leaf.getName, b, leaf)
-        case 's' => core.SRShort(leaf.getName, b, leaf)
-        case 'I' => core.SRInt(leaf.getName, b, leaf)
-        case 'i' => core.SRInt(leaf.getName, b, leaf)
-        case 'F' => core.SRFloat(leaf.getName, b, leaf)
-        case 'D' => core.SRDouble(leaf.getName, b, leaf)
-        case 'L' => core.SRLong(leaf.getName, b, leaf)
-        case 'l' => core.SRLong(leaf.getName, b, leaf)
-        case 'O' => core.SRBoolean(leaf.getName, b, leaf)
+        case 'C' => core.SRString(nameToUse, b, leaf)
+        case 'B' => core.SRByte(nameToUse, b, leaf)
+        case 'b' => core.SRByte(nameToUse, b, leaf)
+        case 'S' => core.SRShort(nameToUse, b, leaf)
+        case 's' => core.SRShort(nameToUse, b, leaf)
+        case 'I' => core.SRInt(nameToUse, b, leaf)
+        case 'i' => core.SRInt(nameToUse, b, leaf)
+        case 'F' => core.SRFloat(nameToUse, b, leaf)
+        case 'D' => core.SRDouble(nameToUse, b, leaf)
+        case 'L' => core.SRLong(nameToUse, b, leaf)
+        case 'l' => core.SRLong(nameToUse, b, leaf)
+        case 'O' => core.SRBoolean(nameToUse, b, leaf)
         case _ => core.SRNull
+      }
     }
 
     def synthesizeLeaf(b: TBranch, leaf: TLeaf): core.SRType = {
-      def iterate(dimsToGo: Int): core.SRType =
-        if (dimsToGo==1) core.SRArray(leaf.getName, b, leaf, synthesizeLeafType(b, leaf), 
+      val nameToUse = if (b.getLeaves.size==1) b.getName else leaf.getName
+      def iterate(dimsToGo: Int): core.SRType = {
+        if (dimsToGo==1) core.SRArray(
+          // TODO: this is a hack!!! Naming Conventions should be identified properly!!!
+          // nameToUse should be fixed!
+          nameToUse, b, leaf, synthesizeLeafType(b, leaf), 
           leaf.getMaxIndex()(leaf.getArrayDim-1))
         else
-          core.SRArray(leaf.getName, b, leaf, iterate(dimsToGo-1), leaf.getMaxIndex()(
+          // TODO: this is a hack!!! Naming Conventions should be identified properly!!!
+          // nameToUse should be fixed!
+          core.SRArray(nameToUse, b, leaf, iterate(dimsToGo-1), leaf.getMaxIndex()(
             leaf.getArrayDim-dimsToGo))
+      }
 
       if (leaf.isInstanceOf[TLeafElement])
         // leafElement
