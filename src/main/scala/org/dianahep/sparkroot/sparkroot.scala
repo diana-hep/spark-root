@@ -46,10 +46,8 @@ package object sparkroot {
     filters: Array[Filter]) extends Iterator[Row] {
 
     //  Abstract Schema Tree
-//    private val ast = buildAST(rootTree, null, requiredColumns)
     private val att = buildATT(tree, streamers, requiredColumns)
     //  next exists
-//    def hasNext = containsNext(ast)
     def hasNext = containsNext(att)
     //  get the next Row
     def next() = readSparkRow(att)
@@ -78,13 +76,11 @@ package object sparkroot {
     }
     
     // create the abstract tree
-//    private val ast: AbstractSchemaTree = 
     private val att: core.SRType = 
     {
       //logger.info("Building the Abstract Schema Tree...")
       logger.info(s"Building the Abstract Schema Tree... for treeName=$treeName")
       val reader = new RootFileReader(inputPathFiles head)
-//      val tmp = buildAST(findTree(reader.getTopDir), null, null) 
       val tmp = 
         if (treeName==null)
           buildATT(findTree(reader.getTopDir), arrangeStreamers(reader), null)
@@ -101,7 +97,6 @@ package object sparkroot {
       //logger.info("Building the Spark Schema")
       logger.info("Building the Spark Schema")
       val s = buildSparkSchema(att)
-//      val s = buildSparkSchema(ast)
       //logger.info("Done")
       logger.info("Done")
       s
