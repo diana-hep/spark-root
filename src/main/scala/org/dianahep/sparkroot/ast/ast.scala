@@ -1293,11 +1293,25 @@ package object ast
       // for the cases like count.... 
       case Array() => new core.SREmptyRoot(tree.getName, tree.getEntries)
       // for the non-empty list of columns that are required by for a query
+      case _ => new core.SRRoot(tree.getName, tree.getEntries,  
+        requiredColumnd.map(x =>
+          for (i <- 0 until tree.getNBranches;
+            b = tree.getBranch(i) if b.getName().replace(".", "_")==x
+          ) yield 
+        )
+
+        /*
+        for (rc <- requiredColumns; i <- 0 until tree.getNBranches; 
+          b = tree.getBranch(i) if b.getName().replace(".", "_")==rc)
+          yield synthesizeTopBranch(b)
+          */
+      )
+      /*
       case _ => new core.SRRoot(tree.getName, tree.getEntries,
         for (i <- 0 until tree.getNBranches; b=tree.getBranch(i) 
           if requiredColumns.contains(b.getName().replace(".", "_")))
           yield synthesizeTopBranch(b)
-      )
+      )*/
     }
   }
 
