@@ -1,6 +1,6 @@
 package org.dianahep.sparkroot
 
-import org.dianahep.sparkroot.ast._
+import org.dianahep.sparkroot.core._
 import org.dianahep.root4j.interfaces._
 import org.dianahep.root4j.core._
 import org.dianahep.root4j._
@@ -9,7 +9,7 @@ import org.apache.spark.sql.types._
 
 import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 
-package object ast
+package object core
 {
   private lazy val logger = LogManager.getLogger("org.dianahep.sparkroot.core.ast") 
 
@@ -1157,22 +1157,6 @@ package object ast
       )
     }
   }
-
-  /**
-   */
-  /*
-  }*/
-
-  /**
-   */
-  /*
-  }*/
-
-  /**
-   */
-  /*
-      case _ => null
-  }*/
 
   /*
    * Section for some utils

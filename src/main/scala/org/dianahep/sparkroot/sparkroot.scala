@@ -19,7 +19,7 @@ import org.apache.hadoop.fs.{Path, FileSystem, PathFilter}
 import org.dianahep.root4j.core.RootInput
 import org.dianahep.root4j._
 import org.dianahep.root4j.interfaces._
-import sparkroot.ast._
+import sparkroot.core._
 
 // logging
 import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
