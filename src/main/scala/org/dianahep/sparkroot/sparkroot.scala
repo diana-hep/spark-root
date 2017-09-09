@@ -10,6 +10,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.PrunedFilteredScan
 import org.apache.spark.sql.sources.RelationProvider
+import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.types._
 
 // hadoop hdfs 
@@ -128,7 +129,8 @@ package object sparkroot {
 }
 
 /**
- *  Default Source - spark.sqlContext.read.root(filename) will be directed here!
+ *  Default Source - spark.sqlContext.read.root(filename) will be directed here
+ *  DefaultSource is used if no registration of the Source has been explicitly made!!
  */
 package sparkroot {
   class DefaultSource extends RelationProvider {
