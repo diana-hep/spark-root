@@ -25,7 +25,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.dianahep.root4j.core.RootInput
 import org.dianahep.root4j._
 import org.dianahep.root4j.interfaces._
-import org.dianahep.sparkroot.core._
+import org.dianahep.sparkroot.experimental.core._
 
 // logging
 import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
@@ -51,9 +51,9 @@ package experimental {
   class TTreeIterator(
       tree: TTree,
       streamers: Map[String, TStreamerInfo],
-      requiredColumns: Array[String],
+      requiredSchema: StructType,
       filters: Array[Filter]) extends Iterator[Row] {
-    private val tt = buildATT(tree, streamers, requiredColumns)
+    private val tt = buildATT(tree, streamers, Some(requiredSchema))
     def hasNext = containsNext(tt)
     def next() = readSparkRow(tt)
   }
@@ -79,7 +79,7 @@ package experimental {
       files.map(_.getPath.toString).foreach({x: String => logger.info(s"pathname = $x")})
       val reader = new RootFileReader(files.head.getPath.toString)
       Some(buildSparkSchema(
-        buildATT(findTree(reader.getTopDir, treeName), arrangeStreamers(reader), null)))
+        buildATT(findTree(reader.getTopDir, treeName), arrangeStreamers(reader), None)))
     }
 
     /** reading function */
@@ -94,7 +94,7 @@ package experimental {
       logger.info(s"buildReaderWithPartitionValues...")
       logger.info(s"${dataSchema.fields.map(_.name).toSeq}")
       logger.info(s"${partitionSchema.fields.map(_.name).toSeq}")
-      logger.info(s"${requiredSchema.fields.map(_.name).toSeq}")
+      logger.info(s"${requiredSchema.treeString}")
       logger.info(s"$options")
 //      buildReader(sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
       
@@ -104,7 +104,7 @@ package experimental {
         val reader = new RootFileReader(file.filePath)
         val ttree = findTree(reader, treeName);
         val iter = new TTreeIterator(ttree, arrangeStreamers(reader),
-          requiredSchema.fields.map(_.name), filters.toArray)
+          requiredSchema, filters.toArray)
 
         new Iterator[InternalRow] {
           // encoder to convert from Row to InternalRow
