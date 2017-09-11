@@ -92,9 +92,9 @@ package experimental {
         options: Map[String, String],
         hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
       logger.info(s"buildReaderWithPartitionValues...")
-      logger.info(s"${dataSchema.fields.map(_.name).toSeq}")
-      logger.info(s"${partitionSchema.fields.map(_.name).toSeq}")
-      logger.info(s"${requiredSchema.treeString}")
+      logger.info(s"dataColumns: ${dataSchema.fields.map(_.name).toSeq}")
+      logger.info(s"partitionColumns: ${partitionSchema.fields.map(_.name).toSeq}")
+      logger.info(s"partitionSchema: \n${requiredSchema.treeString}")
       logger.info(s"$options")
 //      buildReader(sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
       
