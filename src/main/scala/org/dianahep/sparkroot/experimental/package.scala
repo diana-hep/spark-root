@@ -53,7 +53,15 @@ package experimental {
       streamers: Map[String, TStreamerInfo],
       requiredSchema: StructType,
       filters: Array[Filter]) extends Iterator[Row] {
-    private val tt = buildATT(tree, streamers, Some(requiredSchema))
+    private val tt = {
+      val tmp = buildATT(tree, streamers, Some(requiredSchema))
+      tmp match {
+        // If we have top columns in the select statement =>
+        // prune the root with the required schema
+        case root @ SRRoot(_, _, _) => pruneATT(root, requiredSchema)
+        case _ => tmp
+      }
+    }
     def hasNext = containsNext(tt)
     def next() = readSparkRow(tt)
   }

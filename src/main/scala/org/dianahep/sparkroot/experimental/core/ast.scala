@@ -63,6 +63,47 @@ package object core
   def containsNext(att: core.SRType) = att.hasNext
 
   /**
+   * Perform the Pruning of the Typed Tree
+   */
+  def pruneATT(
+      root: core.SRRoot,
+      requiredSchema: StructType): core.SRRoot = {
+    // recursively iterate over the tree and decide on the children that should be 
+    // 1) dropped completely from the schema
+    // 2) left in the spark-root IR schema (read in!) but dropped from the spark schema
+    // and from what is fed downstream to Spark's Row
+    //
+    // Assumptions:
+    // 1) main's type is part of the required schema
+    // 2) main's type = required's type
+    def iterate(main: core.SRType, required: core.SRType): core.SRType = main match {
+      case composite: core.SRComposite => core.SRComposite(composite.name,
+        composite.b, 
+        {
+          val requiredComposite = required.asInstanceOf[core.SRComposite]
+          composite.members filter {
+            srtype: core.SRType => requiredComposite.exists
+          }
+
+        composite.members filter {
+          srtype: core.SRType => 
+            required.asInstanceOf[core.SRComposite].members.exists()
+        },
+        }
+        composite.split, composite.isTop, composite.isBase)
+      case simpleType: core.SRSimpleType => simpleType
+      case vectorType: 
+      case someType: core.SRType => someType
+    }
+      
+
+    // these are top branches -> root and requiredRoot must match here!
+    core.SRRoot(root.name, root.entries, 
+      root.types zip requiredRoot.types map { 
+        case (left, right) => iterate(left, right)})
+  }
+
+  /**
    * Build ATT - Abractly Typed Tree
    *
    * @return ATT

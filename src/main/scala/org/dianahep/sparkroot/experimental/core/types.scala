@@ -84,7 +84,7 @@ case object SRNull extends SRType("Null") {
   }
   override def readArray(size: Int) = {
     debugMe(s"readArray($size)")
-    for (i <- 0 until size) yield null
+    for (i <- 0 until size) yield nulli
   }
   override def readArray(buffer: RootInput, size: Int) = {
     debugMe(s"readArray(buffer, $size)")
@@ -119,6 +119,36 @@ case class SRRoot(override val name: String, var entries: Long, types: Seq[SRTyp
     for (t <- types) yield StructField(t.toName, t.toSparkType)
   )
 }
+
+// companion
+object SRRoot {
+  def apply(stype: StructType) = 
+    new SRRoot("root", 0, stype.fields.map(
+      {field => converter.toSRType(field.name, field.dataType)}))
+}
+
+object converter {
+  def toSRType(name: String, dataType: DataType): SRType = dataType match {
+    case StructType(fields) => SRComposite(name, null, 
+      field.map({field => toSRType(field.name, field.dataType)}), false, false)
+
+    case StringType => SRString(name, null, null)
+    case ShortType => SRShort(name, null, null)
+    case BooleanType => SRBoolean(name, null, null)
+    case LongType => SRLong(name, null, null)
+    case DoubleType => SRDouble(name, null, null)
+    case ByteType => SRByte(name, null, null)
+    case IntegerType => SRInt(name, null, null)
+    case FloatType => SRFloat(name, null, null)
+    case ArrayType(elementType, _) => SRArray(name, null, null, 
+      toSRType("element", elementType), 0)
+    case MapType(keyType, valueType, _) => SRMap(name, null,
+      toSRType("key", keyType), toSRType("value", valueType), false, false)
+    case NullType => SRNull
+    case _ => SRNull
+  }
+}
+
 case class SREmptyRoot(override val name: String, var entries: Long) 
   extends SRType(name) {
   override def debugMe(str: String) = logger.debug(s"SREmptyRoot::$name $str")
@@ -1306,4 +1336,10 @@ case class SRComposite(
   override val toSparkType = StructType(
     for (t <- members) yield StructField(t.toName, t.toSparkType)
   )
+}
+
+// companion
+object SRComposite {
+  def apply(other: SRComposite): SRComposite = SRComposite(other.name,
+    other.b, other.members, other.split, other.isTop, other.isBase)
 }
