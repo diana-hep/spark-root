@@ -68,39 +68,74 @@ package object core
   def pruneATT(
       root: core.SRRoot,
       requiredSchema: StructType): core.SRRoot = {
-    // recursively iterate over the tree and decide on the children that should be 
-    // 1) dropped completely from the schema
-    // 2) left in the spark-root IR schema (read in!) but dropped from the spark schema
-    // and from what is fed downstream to Spark's Row
     //
-    // Assumptions:
-    // 1) main's type is part of the required schema
-    // 2) main's type = required's type
-    def iterate(main: core.SRType, required: core.SRType): core.SRType = main match {
-      case composite: core.SRComposite => core.SRComposite(composite.name,
-        composite.b, 
-        {
-          val requiredComposite = required.asInstanceOf[core.SRComposite]
-          composite.members filter {
-            srtype: core.SRType => requiredComposite.exists
+    def iterate(
+        main: core.SRType, 
+        optRequiredType: Option[DataType]): core.SRType = main match {
+          case x: core.SRSimpleType => optRequiredType match {
+            // if type is not provided, this guy shuold be marked for dropping
+            case None => x.drop
+            // if the type is provided - we just leave as is
+            case Some(tpe) => x
           }
-
-        composite.members filter {
-          srtype: core.SRType => 
-            required.asInstanceOf[core.SRComposite].members.exists()
-        },
-        }
-        composite.split, composite.isTop, composite.isBase)
-      case simpleType: core.SRSimpleType => simpleType
-      case vectorType: 
-      case someType: core.SRType => someType
+          case x: core.SRCollectionType => optRequiredType match {
+            case None => x.drop
+            case Some(tpe) => x match {
+              // for the array type check => iterate thru the  children 
+              case xx @ core.SRVector => core.SRVector(xx.name, xx.b, 
+                iterate(xx.t, Some(tpe.asInstanceOf[ArrayType].elementType)), 
+                xx.split, xx.isTop)
+              // for the rest just assign x. Map should come in full or String...
+              case _ => x
+            }
+          }
+          case x: core.SRNull => optRequiredType match {
+            case None => x.drop
+            case Some(type) => x
+          }
+          case x: core.SRUnknown => optRequiredType match {
+            case None => x.drop
+            case Some(type) => x
+          }
+          case x: core.SRComposite => 
+            if (x.split) optRequiredType match {
+              case None => // should not happen!
+                x.drop
+              case Some(tpe) => 
+                // composite is split and is in the required schema
+                core.SRComposite(x.name, x.b, 
+                  // tpe must be StructType
+                  tpe.asInstanceOf[StructType].fields.map({
+                    case field => iterate(x.members.find(
+                      // find the guy by name
+                      // assume that it is foudn! otherwise head will gen an exception
+                      {case t => t.name==field.name}).head, 
+                    Some(field.dataType))}), x.split, x.isTop, x.isBase)
+            } else optRequiredType match {
+              case None => 
+                // this composite should be read in but dropped
+                x.drop
+              case Some(tpe) => 
+                // this composite is not splittable
+                core.SRComposite(x.name, x.b, 
+                  x.members.map {case m => iterate(m, 
+                    tpe.asInstanceOf[StructType].fields.find 
+                      {case field => field.name == m.name}.map(_.dataType)
+                  )},
+                  x.split, x.isTop, x.isBase)
+                
+            }
+          case t: core.SRType => optRequiredType match {
+            case None => x.drop
+            case Some(tpe) => x
+          }
     }
       
 
     // these are top branches -> root and requiredRoot must match here!
     core.SRRoot(root.name, root.entries, 
       root.types zip requiredRoot.types map { 
-        case (left, right) => iterate(left, right)})
+        case (left, right) => iterate(left, Some(right))})
   }
 
   /**

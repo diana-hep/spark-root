@@ -20,7 +20,7 @@ case object SRRootType extends SRTypeTag;
 case object SRCollectionType extends SRTypeTag;
 case object SRCompositeType extends SRTypeTag;
 
-abstract class SRType(val name: String) {
+abstract class SRType(val name: String, val _shouldDrop: Boolean = false) {
   protected lazy val logger = LogManager.getLogger("org.dianahep.sparkroot.core.TypeSystem")
   def debugMe(str: String): Unit
 
@@ -40,15 +40,28 @@ abstract class SRType(val name: String) {
   val toName: String = name.replace('.', '_')
   //val toName: String = name
 
+  def shouldDrop: Boolean = _shouldDrop
+  def drop: SRType
+
   protected var entry = 0L
 }
 
-abstract class SRSimpleType(name: String, b: TBranch, l: TLeaf) extends SRType(name);
-abstract class SRCollection(name: String, isTop: Boolean) extends SRType(name) {
+abstract class SRSimpleType(
+    name: String, 
+    b: TBranch, 
+    l: TLeaf,
+    _shouldDrop: Boolean = false
+    ) extends SRType(name, _shouldDrop);
+abstract class SRCollection(
+    name: String, 
+    isTop: Boolean,
+    _shouldDrop: Boolean = false) extends SRType(name, _shouldDrop) {
   protected val kMemberWiseStreaming = 0x4000
 }
 
-case class SRUnknown(override val name: String) extends SRType(name) {
+case class SRUnknown(
+    override val name: String, 
+    override val _shouldDrop: Boolean = false) extends SRType(name, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRUnknown::$name $str")
 
   override def read(b: RootInput) = { 
@@ -69,9 +82,12 @@ case class SRUnknown(override val name: String) extends SRType(name) {
   }
   override def hasNext = false
   override val toSparkType = NullType
+
+  override def drop: SRUnknown(name, true)
 }
 
-case object SRNull extends SRType("Null") {
+case class SRNull(
+    override val _shouldRop: Boolean = false) extends SRType("Null", _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRNull::no name $str")
 
   override def read(b: RootInput) = {
@@ -92,9 +108,14 @@ case object SRNull extends SRType("Null") {
   }
   override def hasNext = false
   override val toSparkType = NullType
+
+  override def drop = SRNull(true)
 }
 
-case class SRRoot(override val name: String, var entries: Long, types: Seq[SRType]) extends SRType(name) {
+case class SRRoot(
+    override val name: String, 
+    var entries: Long, 
+    types: Seq[SRType]) extends SRType(name, false) {
   override def debugMe(str: String) = logger.debug(s"SRRoot::$name $str")
   override def read(b: RootInput) = {
     debugMe("read(buffer)")
@@ -118,13 +139,8 @@ case class SRRoot(override val name: String, var entries: Long, types: Seq[SRTyp
   override val toSparkType = StructType(
     for (t <- types) yield StructField(t.toName, t.toSparkType)
   )
-}
 
-// companion
-object SRRoot {
-  def apply(stype: StructType) = 
-    new SRRoot("root", 0, stype.fields.map(
-      {field => converter.toSRType(field.name, field.dataType)}))
+  override def drop = this
 }
 
 object converter {
@@ -149,8 +165,9 @@ object converter {
   }
 }
 
-case class SREmptyRoot(override val name: String, var entries: Long) 
-  extends SRType(name) {
+case class SREmptyRoot(
+    override val name: String, var entries: Long) 
+    extends SRType(name, false) {
   override def debugMe(str: String) = logger.debug(s"SREmptyRoot::$name $str")
   override def read(b: RootInput) = {
     debugMe("read(buffer)")
@@ -170,10 +187,13 @@ case class SREmptyRoot(override val name: String, var entries: Long)
   }
   override def hasNext = entries>0
   override val toSparkType = StructType(Seq())
+
+  override def drop = this
 }
 
-case class SRString(override val name: String, b: TBranch, l: TLeaf) 
-  extends SRSimpleType(name, b, l) {
+case class SRString(
+    override val name: String, b: TBranch, l: TLeaf, val _shouldDrop: Boolean = false) 
+    extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRString::$name $str")
   override def read(buffer: RootInput) = {
     debugMe("read(buffer)")
@@ -204,10 +224,13 @@ case class SRString(override val name: String, b: TBranch, l: TLeaf)
   }
   override def hasNext = entry<b.getEntries
   override val toSparkType = StringType
+
+  override def drop = SRString(name, b, l, true)
 }
 
-case class SRShort(override val name: String, b: TBranch, l: TLeaf) 
-  extends SRSimpleType(name, b, l) {
+case class SRShort(
+    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRShort::$name $str")
   override def read(buffer: RootInput) = {
     debugMe(s"read(buffer)")
@@ -238,10 +261,13 @@ case class SRShort(override val name: String, b: TBranch, l: TLeaf)
   }
   override def hasNext = entry<b.getEntries
   override val toSparkType = ShortType
+
+  override def drop = SRShort(name, b, l, true)
 }
 
-case class SRBoolean(override val name: String, b: TBranch, l: TLeaf) 
-  extends SRSimpleType(name, b, l) {
+case class SRBoolean(
+    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    extends SRSimpleType(name, b, l) {
   override def debugMe(str: String) = logger.debug(s"SRBoolean::$name $str")
   override def read(buffer: RootInput) = {
     debugMe("read(buffer)")
@@ -268,10 +294,13 @@ case class SRBoolean(override val name: String, b: TBranch, l: TLeaf)
   }
   override def hasNext = entry<b.getEntries
   override val toSparkType = BooleanType
+
+  override def drop = SRBoolean(name, b, l, true)
 }
 
-case class SRLong(override val name: String, b: TBranch, l: TLeaf) 
-  extends SRSimpleType(name, b, l) {
+case class SRLong(
+    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    extends SRSimpleType(name, b, l, _shuoldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRLong::$name $str")
   override def read(buffer: RootInput) = {
     debugMe("read(buffer)")
@@ -298,10 +327,13 @@ case class SRLong(override val name: String, b: TBranch, l: TLeaf)
   }
   override def hasNext = entry<b.getEntries
   override val toSparkType = LongType
+
+  override def drop = SRLong(name, b, l, true)
 }
 
-case class SRDouble(override val name: String, b: TBranch, l: TLeaf)
-  extends SRSimpleType(name, b, l) {
+case class SRDouble(
+    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false)
+    extends SRSimpleType(name, b, l, shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRDouble::$name $str")
   override def read(buffer: RootInput) = {
     debugMe("read(buffer)")
@@ -328,10 +360,13 @@ case class SRDouble(override val name: String, b: TBranch, l: TLeaf)
   }
   override def hasNext = entry<b.getEntries
   override val toSparkType = DoubleType
+
+  override def drop = SRDouble(name, eb, l, true)
 }
 
-case class SRByte(override val name: String, b: TBranch, l: TLeaf) 
-  extends SRSimpleType(name, b, l) {
+case class SRByte(
+    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRByte::$name $str")
   override def read(buffer: RootInput) = {
     debugMe("read(buffer)")
@@ -358,10 +393,13 @@ case class SRByte(override val name: String, b: TBranch, l: TLeaf)
   }
   override def hasNext = entry<b.getEntries
   override val toSparkType = ByteType
+
+  override def drop = SRByte(name, b, l, true)
 }
 
-case class SRInt(override val name: String, b: TBranch, l: TLeaf) 
-  extends SRSimpleType(name, b, l) {
+case class SRInt(
+    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRInt::$name $str")
   override def read(buffer: RootInput) = {
     debugMe(s"read(buffer)")
@@ -392,9 +430,12 @@ case class SRInt(override val name: String, b: TBranch, l: TLeaf)
   }
   override def hasNext = entry<b.getEntries
   override val toSparkType = IntegerType
+
+  override def drop = SRInt(name, b, l, true)
 }
-case class SRFloat(override val name: String, b: TBranch, l: TLeaf) 
-  extends SRSimpleType(name, b, l) {
+case class SRFloat(
+    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRFloat::$name $str")
   override def read(buffer: RootInput) = {
     debugMe(s"read(buffer)")
@@ -425,11 +466,16 @@ case class SRFloat(override val name: String, b: TBranch, l: TLeaf)
   }
   override def hasNext = entry<b.getEntries
   override val toSparkType = FloatType
+
+  override def drop = SRFloat(name,e b, l, true)
 }
 
-case class SRArray(override val name: String, b: TBranch, l:TLeaf, t: SRType, n: Int) 
-  extends SRSimpleType(name, b, l) {
+case class SRArray(
+    override val name: String, b: TBranch, l:TLeaf, 
+    t: SRType, n: Int, _shouldDrop: Boolean = false) 
+    extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRArray::$name $str")
+  override def drop = SRArray(name, b, l, t.drop, n, true)
   override def read(buffer: RootInput) = {
     debugMe("read(buffer)")
     val data = 
@@ -494,9 +540,11 @@ case class SRArray(override val name: String, b: TBranch, l:TLeaf, t: SRType, n:
  * also different for array reading
  */
 case class SRSTLString(override val name: String, 
-  b: TBranch,  // branch
-  isTop: Boolean) // is it nested inside some other collection? 
-  extends SRCollection(name, isTop) {
+    b: TBranch,  // branch
+    isTop: Boolean, // is it nested inside some other collection? 
+    _shouldDrop: Boolean = false)
+    extends SRCollection(name, isTop, _shouldDrop) {
+  override def drop = SRSTLString(name, b, isTop, true)
   override def debugMe(str: String) = logger.debug(s"SRSTLString::$name $str Event=$entry")
   override def read(buffer: RootInput) = {
     debugMe("read(buffer)")
@@ -557,13 +605,15 @@ case class SRSTLString(override val name: String,
  * TODO: Do we have MemberWise Streaming for a map???
  */
 case class SRMultiMap(
-  override val name: String, // actual name if branch is null
-  b: TBranchElement, // branch to read from... 
-  keyType: SRType, // key type
-  valueType: SRType, // value type
-  split: Boolean, // does it have subbranches
-  isTop: Boolean // is this map nested in another collection?
-  ) extends SRCollection(name, isTop) {
+    override val name: String, // actual name if branch is null
+    b: TBranchElement, // branch to read from... 
+    keyType: SRType, // key type
+    valueType: SRType, // value type
+    split: Boolean, // does it have subbranches
+    isTop: Boolean, // is this map nested in another collection?
+    _shouldDrop: Boolean = false
+    ) extends SRCollection(name, isTop, _shouldDrop) {
+  override def drop = SRMultiMap(name, b, keyType.drop, valueType.drop, split, isTop, true)
   override def debugMe(str: String) = logger.debug(
     s"SRMultiMap::$name $str Event=$entry")
   // aux constructor where key is the members(0) and members(1) is the value
@@ -754,13 +804,16 @@ case class SRMultiMap(
  * TODO: Do we have MemberWise Streaming for a map???
  */
 case class SRMap(
-  override val name: String, // actual name if branch is null
-  b: TBranchElement, // branch to read from... 
-  keyType: SRType, // key type
-  valueType: SRType, // value type
-  split: Boolean, // does it have subbranches
-  isTop: Boolean // is this map nested in another collection?
-  ) extends SRCollection(name, isTop) {
+    override val name: String, // actual name if branch is null
+    b: TBranchElement, // branch to read from... 
+    keyType: SRType, // key type
+    valueType: SRType, // value type
+    split: Boolean, // does it have subbranches
+    isTop: Boolean, // is this map nested in another collection?
+    _shouldDrop: Boolean = false
+    ) extends SRCollection(name, isTop, _shouldDrop) {
+  override def drop = SRMap(name, b, keyType.drop, valueType.drop,
+    split, isTop, true)
   override def debugMe(str: String) = logger.debug(s"SRMap::$name $str Event=$entry")
   // aux constructor where key is the members(0) and members(1) is the value
   def this(name: String, b: TBranchElement, types: SRComposite, split: Boolean,
@@ -944,12 +997,14 @@ case class SRMap(
  * STL Vector Representation
  */
 case class SRVector(
-  override val name: String, // actual name if branch is null
-  b: TBranchElement, // branch to read from... 
-  t: SRType, // value member type
-  split: Boolean, // does it have subbranches
-  isTop: Boolean // is this vector nested in another collection?
-  ) extends SRCollection(name, isTop) {
+    override val name: String, // actual name if branch is null
+    b: TBranchElement, // branch to read from... 
+    t: SRType, // value member type
+    split: Boolean, // does it have subbranches
+    isTop: Boolean, // is this vector nested in another collection?
+    _shouldDrop: Boolean = false
+    ) extends SRCollection(name, isTop, _shouldDrop) {
+  override def drop = SRVector(name, b, t.drop, split, isTop, true)
   override def debugMe(str: String) = logger.debug(s"SRVector::$name $str Event=$entry")
 
   /**
@@ -1189,13 +1244,17 @@ case class SRVector(
  * Composite (non-iterable class) representation
  */
 case class SRComposite(
-  override val name: String, // name
-  b: TBranch, // branch
-  members: Seq[SRType], // fields
-  split: Boolean, // is it split - are there sub branches
-  isTop: Boolean, // top branch composite doens't read the header
-  isBase: Boolean = false // is this composite a base class or not
-  ) extends SRType(name) {
+    override val name: String, // name
+    b: TBranch, // branch
+    members: Seq[SRType], // fields
+    split: Boolean, // is it split - are there sub branches
+    isTop: Boolean, // top branch composite doens't read the header
+    isBase: Boolean = false, // is this composite a base class or not
+    _shouldDrop: Boolean = false
+    ) extends SRType(name, _shouldDrop) {
+
+  override def drop = SRComposite(name, b, members.map(_.drop), split, isTop,
+    isBase, true)
 
   override def debugMe(str: String) = logger.debug(s"SRComposite::$name $str Event=$entry")
   override def readArray(size: Int) = {
