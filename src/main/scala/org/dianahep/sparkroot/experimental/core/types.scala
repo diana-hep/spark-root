@@ -40,7 +40,7 @@ abstract class SRType(val name: String, val _shouldDrop: Boolean = false) {
   val toName: String = name.replace('.', '_')
   //val toName: String = name
 
-  def shouldDrop: Boolean = _shouldDrop
+  val shouldDrop: Boolean = _shouldDrop
   def drop: SRType
 
   protected var entry = 0L
@@ -50,12 +50,12 @@ abstract class SRSimpleType(
     name: String, 
     b: TBranch, 
     l: TLeaf,
-    _shouldDrop: Boolean = false
+    override val _shouldDrop: Boolean = false
     ) extends SRType(name, _shouldDrop);
 abstract class SRCollection(
     name: String, 
     isTop: Boolean,
-    _shouldDrop: Boolean = false) extends SRType(name, _shouldDrop) {
+    override val _shouldDrop: Boolean = false) extends SRType(name, _shouldDrop) {
   protected val kMemberWiseStreaming = 0x4000
 }
 
@@ -229,7 +229,8 @@ case class SRString(
 }
 
 case class SRShort(
-    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    override val name: String, b: TBranch, l: TLeaf, 
+    override val _shouldDrop: Boolean = false) 
     extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRShort::$name $str")
   override def read(buffer: RootInput) = {
@@ -266,7 +267,8 @@ case class SRShort(
 }
 
 case class SRBoolean(
-    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    override val name: String, b: TBranch, l: TLeaf, 
+    override val _shouldDrop: Boolean = false) 
     extends SRSimpleType(name, b, l) {
   override def debugMe(str: String) = logger.debug(s"SRBoolean::$name $str")
   override def read(buffer: RootInput) = {
@@ -299,7 +301,8 @@ case class SRBoolean(
 }
 
 case class SRLong(
-    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    override val name: String, b: TBranch, l: TLeaf, 
+    override val _shouldDrop: Boolean = false) 
     extends SRSimpleType(name, b, l, _shuoldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRLong::$name $str")
   override def read(buffer: RootInput) = {
@@ -332,7 +335,8 @@ case class SRLong(
 }
 
 case class SRDouble(
-    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false)
+    override val name: String, b: TBranch, l: TLeaf, 
+    override val _shouldDrop: Boolean = false)
     extends SRSimpleType(name, b, l, shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRDouble::$name $str")
   override def read(buffer: RootInput) = {
@@ -365,7 +369,8 @@ case class SRDouble(
 }
 
 case class SRByte(
-    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    override val name: String, b: TBranch, l: TLeaf, 
+    override val _shouldDrop: Boolean = false) 
     extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRByte::$name $str")
   override def read(buffer: RootInput) = {
@@ -398,7 +403,8 @@ case class SRByte(
 }
 
 case class SRInt(
-    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    override val name: String, b: TBranch, l: TLeaf, 
+    override val _shouldDrop: Boolean = false) 
     extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRInt::$name $str")
   override def read(buffer: RootInput) = {
@@ -434,7 +440,8 @@ case class SRInt(
   override def drop = SRInt(name, b, l, true)
 }
 case class SRFloat(
-    override val name: String, b: TBranch, l: TLeaf, _shouldDrop: Boolean = false) 
+    override val name: String, b: TBranch, l: TLeaf, 
+    override val _shouldDrop: Boolean = false) 
     extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRFloat::$name $str")
   override def read(buffer: RootInput) = {
@@ -472,7 +479,7 @@ case class SRFloat(
 
 case class SRArray(
     override val name: String, b: TBranch, l:TLeaf, 
-    t: SRType, n: Int, _shouldDrop: Boolean = false) 
+    t: SRType, n: Int, override val _shouldDrop: Boolean = false) 
     extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRArray::$name $str")
   override def drop = SRArray(name, b, l, t.drop, n, true)
@@ -542,7 +549,7 @@ case class SRArray(
 case class SRSTLString(override val name: String, 
     b: TBranch,  // branch
     isTop: Boolean, // is it nested inside some other collection? 
-    _shouldDrop: Boolean = false)
+    override val _shouldDrop: Boolean = false)
     extends SRCollection(name, isTop, _shouldDrop) {
   override def drop = SRSTLString(name, b, isTop, true)
   override def debugMe(str: String) = logger.debug(s"SRSTLString::$name $str Event=$entry")
@@ -611,7 +618,7 @@ case class SRMultiMap(
     valueType: SRType, // value type
     split: Boolean, // does it have subbranches
     isTop: Boolean, // is this map nested in another collection?
-    _shouldDrop: Boolean = false
+    override val _shouldDrop: Boolean = false
     ) extends SRCollection(name, isTop, _shouldDrop) {
   override def drop = SRMultiMap(name, b, keyType.drop, valueType.drop, split, isTop, true)
   override def debugMe(str: String) = logger.debug(
@@ -810,7 +817,7 @@ case class SRMap(
     valueType: SRType, // value type
     split: Boolean, // does it have subbranches
     isTop: Boolean, // is this map nested in another collection?
-    _shouldDrop: Boolean = false
+    override val _shouldDrop: Boolean = false
     ) extends SRCollection(name, isTop, _shouldDrop) {
   override def drop = SRMap(name, b, keyType.drop, valueType.drop,
     split, isTop, true)
@@ -1002,7 +1009,7 @@ case class SRVector(
     t: SRType, // value member type
     split: Boolean, // does it have subbranches
     isTop: Boolean, // is this vector nested in another collection?
-    _shouldDrop: Boolean = false
+    override val _shouldDrop: Boolean = false
     ) extends SRCollection(name, isTop, _shouldDrop) {
   override def drop = SRVector(name, b, t.drop, split, isTop, true)
   override def debugMe(str: String) = logger.debug(s"SRVector::$name $str Event=$entry")
@@ -1030,7 +1037,7 @@ case class SRVector(
         // memberwise streaming
 
         val data = 
-          if (t == SRNull || t.isInstanceOf[SRUnknown]) {
+          if (t.isInstanceOf[SRNull] || t.isInstanceOf[SRUnknown]) {
             for (i <- 0 until size) yield Seq()
           }
           else {
@@ -1044,7 +1051,11 @@ case class SRVector(
             for (i <- 0 until size) yield {
               val nn = buffer.readInt
               if (nn == 0) Seq()
-              else (for (x <- composite.members) yield x.readArray(buffer, nn)
+//              else (for (x <- composite.members) yield x.readArray(buffer, nn)
+              else (
+                for (x <- composite.members; fieldData=x.readArray(buffer, nn) 
+                    if !x.shouldDrop) 
+                  yield fieldData
               ).transpose.map(Row.fromSeq(_))
             }
           }
@@ -1098,12 +1109,15 @@ case class SRVector(
       val size = buffer.readInt
 
       val data = 
-        if (t == SRNull || t.isInstanceOf[SRUnknown]) Seq()
+        if (t == t.isIntanceOf[SRNull] || t.isInstanceOf[SRUnknown]) Seq()
         else {
           val composite = t.asInstanceOf[SRComposite]
 
           // we get Seq(f1[size], f2[size], ..., fN[size])
           // we just have to transpose it
+          //
+          // For the case of a split collection, the fields of the composite 
+          // should've been filtered out during the ATT pruning
           (for (x <- composite.members)
             yield {
               // read array for each field, members will assign the buffer 
@@ -1137,7 +1151,7 @@ case class SRVector(
         // for MemberWise Streaming we read w/o incrementing the event counters 
         // but have to explicitly increment the counter for them!
         val data = 
-          if (t == SRNull || t.isInstanceOf[SRUnknown]) Seq()
+          if (t.isInstanceOf[SRNull] || t.isInstanceOf[SRUnknown]) Seq()
           else {
             val composite = t.asInstanceOf[SRComposite]
 
@@ -1150,11 +1164,9 @@ case class SRVector(
             val size = buffer.readInt
 
             // have to transpose
-            (for (x <- composite.members)
-              yield {
-              // we own the buffer
-              x.readArray(buffer, size)
-            }).transpose.map(Row.fromSeq(_))
+            (for (x <- composite.members; fieldData=x.readArray(buffer, size)
+              if !x.shouldDrop)
+              yield fieldData).transpose.map(Row.fromSeq(_))
           }
         entry += 1L
         data
@@ -1196,7 +1208,7 @@ case class SRVector(
         if ((version & kMemberWiseStreaming) > 0) {
           // memberwise streaming
           // assume we have a composite
-          val data = if (t == SRNull || t.isInstanceOf[SRUnknown]) Seq()
+          val data = if (t.isInstanceOf[SRNull] || t.isInstanceOf[SRUnknown]) Seq()
           else {
             val composite = t.asInstanceOf[SRComposite]
 
@@ -1209,12 +1221,12 @@ case class SRVector(
             val size = buffer.readInt
 
             // have to transpose
-            (for (x <- composite.members)
-              yield {
+            (for (x <- composite.members; fieldData=x.readArray(buffer, size)
+              if !x.shouldDrop)
+              yield fieldData
               //we own the buffer
-              x.readArray(buffer, size)
               // increment the entry
-            }).transpose.map(Row.fromSeq(_))
+            ).transpose.map(Row.fromSeq(_))
           }
           entry += 1L
           data
@@ -1250,7 +1262,7 @@ case class SRComposite(
     split: Boolean, // is it split - are there sub branches
     isTop: Boolean, // top branch composite doens't read the header
     isBase: Boolean = false, // is this composite a base class or not
-    _shouldDrop: Boolean = false
+    override val _shouldDrop: Boolean = false
     ) extends SRType(name, _shouldDrop) {
 
   override def drop = SRComposite(name, b, members.map(_.drop), split, isTop,
@@ -1272,6 +1284,8 @@ case class SRComposite(
         if (members.size==0 ) 
           for (i <- 0 until size) yield Row()
         else
+          // when the Composite is split -> fields must've been filtered out 
+          // at hte point of ATT Construction
           (for (m <- members) yield m.readArray(size)).
             transpose.map(Row.fromSeq(_))
       entry += 1L
@@ -1294,8 +1308,8 @@ case class SRComposite(
         if (members.size == 0)
           for (i <- 0 until size) yield Row()
         else
-          (for (m <- members) yield m.readArray(buffer, size)).
-          transpose.map(Row.fromSeq(_))
+          (for (m <- members; fieldData=m.readArray(buffer, size) 
+            if !m.shouldDrop) yield fieldData).transpose.map(Row.fromSeq(_))
       entry += 1L
       data
     }
@@ -1312,7 +1326,8 @@ case class SRComposite(
         val version = buffer.readVersion
         if (version == 0) buffer.readInt
 
-        Row.fromSeq(for (m <- members) yield m.read(buffer))
+        Row.fromSeq(for (m <- members; fieldData=m.read(buffer)
+          if !m.shouldDrop) yield fieldData)
       }
       entry += 1L
       data
@@ -1334,6 +1349,8 @@ case class SRComposite(
       // split class -- just pass the call to members
       // do not have to read the header information
       entry+=1L
+      // Split mode -> not needed fields must've been filtered out 
+      // at the point of the ATT construction.
       Row.fromSeq(for (m <- members) yield m.read)
     }
     else {
@@ -1351,7 +1368,8 @@ case class SRComposite(
         // do not read the header information
         entry+=1L
         // pass the buffer downstream
-        Row.fromSeq(for (m <- members) yield m.read(buffer))
+        Row.fromSeq(for (m <- members; fieldData=m.read(buffer)
+          if !m.shouldDrop) yield fieldData)
       }
       else {
         /*
@@ -1365,7 +1383,8 @@ case class SRComposite(
         if (version==0) buffer.readInt
         
         entry += 1L
-        Row.fromSeq(for (m <- members) yield m.read(buffer))
+        Row.fromSeq(for (m <- members; fieldData=m.read(buffer)
+          if !m.shouldDrop) yield fieldData)
       }
     }
 
@@ -1388,17 +1407,18 @@ case class SRComposite(
     if (version == 0) buffer.readInt
 
     // read
-    Row.fromSeq(for (m <- members) yield m.read(buffer))
+    Row.fromSeq(for (m <- members; fieldData=m.read(buffer)
+      if !m.shouldDrop) yield fieldData)
   }
 
   override def hasNext = entry<b.getEntries
   override val toSparkType = StructType(
-    for (t <- members) yield StructField(t.toName, t.toSparkType)
+    for (t <- members if !t.shouldDrop) yield StructField(t.toName, t.toSparkType)
   )
 }
 
 // companion
 object SRComposite {
   def apply(other: SRComposite): SRComposite = SRComposite(other.name,
-    other.b, other.members, other.split, other.isTop, other.isBase)
+    other.b, other.members, other.split, other.isTop, other.isBase, other._shouldDrop)
 }
