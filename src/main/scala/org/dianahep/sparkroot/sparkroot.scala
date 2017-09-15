@@ -28,6 +28,18 @@ import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 package object sparkroot {
   @transient lazy val logger = LogManager.getLogger("SparkRoot")
 
+  sealed trait NoTTreeThrowable {
+    self: Throwable =>
+    val optTreeName: Option[String]
+  }
+
+  case class NoTTreeException(
+      override val optTreeName: Option[String] = None) 
+      extends Exception(optTreeName match {
+        case Some(treeName) => s"No TTree ${treeName} found"
+        case None => s"No TTree found"
+      }) with NoTTreeThrowable;
+
   /**
    * An impolicit DataFrame Reader
    */
@@ -58,7 +70,7 @@ package object sparkroot {
    * 1. Builds the Schema
    * 2. Maps execution of each file to a Tree iterator
    */
-  class RootTableScan(path: String, treeName: String)(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan{
+  class RootTableScan(path: String, optTreeName: Option[String])(@transient val sqlContext: SQLContext) extends BaseRelation with PrunedFilteredScan{
     // path is either a dir with files or a pathToFile
     private val inputPathFiles = {
       val pathFilter = new PathFilter() {
@@ -80,17 +92,12 @@ package object sparkroot {
     private val att: core.SRType = 
     {
       //logger.info("Building the Abstract Schema Tree...")
-      logger.info(s"Building the Abstract Schema Tree... for treeName=$treeName")
+      logger.info(s"Building the Abstract Schema Tree... for treeName=${optTreeName}")
       val reader = new RootFileReader(inputPathFiles head)
-      val tmp = 
-        if (treeName==null)
-          buildATT(findTree(reader.getTopDir), arrangeStreamers(reader), null)
-        else 
-          buildATT(reader.getKey(treeName).getObject.asInstanceOf[TTree],
-            arrangeStreamers(reader), null)
-      //logger.info("Done")
-      logger.info("Done")
-      tmp
+      findTree(reader.getTopDir, optTreeName) match {
+        case Some(tree) => buildATT(tree, arrangeStreamers(reader), null)
+        case None => throw NoTTreeException(optTreeName)
+      }
     }
 
     // define the schema from the AST
@@ -108,18 +115,18 @@ package object sparkroot {
       logger.info("Building Scan")
       println(requiredColumns.mkString(" "))
       println(filters)
-      val localTreeName = treeName  
+      val localOptTreeName = optTreeName  
 
       // parallelize over all the files
       val r = sqlContext.sparkContext.parallelize(inputPathFiles).
         flatMap({pathName =>
           logger.info(s"Opening file $pathName")
           val reader = new RootFileReader(pathName)
-          val rootTree = 
-            if (localTreeName == null) findTree(reader)
-            else reader.getKey(localTreeName).getObject.asInstanceOf[TTree]
-          new RootTreeIterator(rootTree, arrangeStreamers(reader), 
-            requiredColumns, filters)
+          findTree(reader, localOptTreeName) match {
+            case Some(tree) => new RootTreeIterator(tree, arrangeStreamers(reader), 
+              requiredColumns, filters)
+            case None => throw NoTTreeException(localOptTreeName)
+          }
         })
 
       logger.info("Done building Scan")
@@ -136,7 +143,7 @@ package sparkroot {
   class DefaultSource extends RelationProvider {
     def createRelation(sqlContext: SQLContext, parameters: Map[String, String]) = {
       println(parameters)
-      new RootTableScan(parameters.getOrElse("path", sys.error("ROOT path must be specified")), parameters.getOrElse("tree", null))(sqlContext)
+      new RootTableScan(parameters.getOrElse("path", sys.error("ROOT path must be specified")), parameters.get("tree"))(sqlContext)
     }
   }
 }

@@ -16,46 +16,41 @@ package object core
   /**
    * @return prints the Abstractly Typed Tree
    */
-  def printATT(att: core.SRType, level: Int = 0, sep: String = "  "): Unit = att match {
-    case core.SRNull => println(sep*level+"Null")
-    case core.SRUnknown(name) => println(sep*level + s"$name: Unknown")
+  def printATT(att: core.SRType, level: Int = 0, sep: String = "  "): String = att match {
+    case core.SRNull(_) => sep*level+"Null" + "\n"
+    case core.SRUnknown(name, _) => sep*level + s"$name: Unknown" + "\n"
     case core.SRRoot(name, entries, types) => {
-      println(s"Root: $name wtih $entries Entries")
-      for (t <- types) printATT(t, level+1)
+      s"Root: $name wtih $entries Entries" + "\n" + (for (t <- types) 
+        yield printATT(t, level+1)).mkString("")
     }
     case core.SREmptyRoot(name, entries) =>
-      println(s"Empty Root: $name with $entries Entries")
-    case core.SRInt(name, _, _) => println(sep*level+s"$name: Integer")
-    case core.SRString(name, _, _) => println(sep*level+s"$name: String")
-    case core.SRLong(name, _, _) => println(sep*level+s"$name: Long")
-    case core.SRDouble(name, _, _) => println(sep*level+s"$name: Double")
-    case core.SRByte(name, _, _) => println(sep*level+s"$name: Byte")
-    case core.SRBoolean(name, _, _) => println(sep*level+s"$name: Boolean")
-    case core.SRFloat(name, _, _) => println(sep*level+s"$name: Float")
-    case core.SRShort(name, _, _) => println(sep*level + s"$name: Short")
-    case core.SRArray(name, _, _, t, n) => {
-      println(sep*level + s"$name: Array[$n]")
-      printATT(t, level+1)
+      s"Empty Root: $name with $entries Entries" + "\n"
+    case core.SRInt(name, _, _, _) => sep*level+s"$name: Integer" + "\n"
+    case core.SRString(name, _, _, _) => sep*level+s"$name: String" + "\n"
+    case core.SRLong(name, _, _, _) => sep*level+s"$name: Long" + "\n"
+    case core.SRDouble(name, _, _, _) => sep*level+s"$name: Double" + "\n"
+    case core.SRByte(name, _, _, _) => sep*level+s"$name: Byte" + "\n"
+    case core.SRBoolean(name, _, _, _) => sep*level+s"$name: Boolean" + "\n"
+    case core.SRFloat(name, _, _, _) => sep*level+s"$name: Float" + "\n"
+    case core.SRShort(name, _, _, _) => sep*level + s"$name: Short" + "\n"
+    case core.SRArray(name, _, _, t, n, _) => {
+      sep*level + s"$name: Array[$n]" + "\n" + printATT(t, level+1)
     }
-    case core.SRVector(name, _, t, split, isTop) => {
-      println(sep*level + s"$name: STL Vector. split=$split and isTop=$isTop")
-      printATT(t, level+1)
+    case core.SRVector(name, _, t, split, isTop, _) => {
+      sep*level + s"$name: STL Vector. split=$split and isTop=$isTop" + "\n" + printATT(t, level+1)
     }
-    case core.SRMap(name, _, keyType, valueType, split, isTop) => {
-      println(sep*level + s"$name: Map ${keyType.name} => ${valueType.name}. split=$split and isTop=$isTop")
-      println(sep*(level+1) + "Key Type:")
-      printATT(keyType, level+2)
-      println(sep*(level+1) + "Value Type:")
-      printATT(valueType, level+2)
+    case core.SRMap(name, _, keyType, valueType, split, isTop, _) => {
+      sep*level + s"$name: Map ${keyType.name} => ${valueType.name}. split=$split and isTop=$isTop" + "\n" + sep*(level+1) + "Key Type:" + "\n" + printATT(keyType, level+2) + 
+        sep*(level+1) + "Value Type:" + "\n" + printATT(valueType, level+2)
     }
-    case core.SRSTLString(name, _, isTop) => {
-      println(sep*level + s"$name: STL String isTop=$isTop")
+    case core.SRSTLString(name, _, isTop, _) => {
+      sep*level + s"$name: STL String isTop=$isTop" + "\n"
     }
-    case core.SRComposite(name, b, members, split, isTop, isBase) => {
-      println(sep*level + s"${name}: Composite split=$split isTop=$isTop isBase=$isBase")
-      for (t <- members) printATT(t, level+1)
+    case core.SRComposite(name, b, members, split, isTop, isBase, _) => {
+      sep*level + s"${name}: Composite split=$split isTop=$isTop isBase=$isBase" + "\n" +
+        (for (t <- members) yield printATT(t, level+1)).mkString("")
     }
-    case _ => println("")
+    case _ => ""
   }
 
   def buildSparkSchema(att: core.SRType) = att.toSparkType.asInstanceOf[StructType]
@@ -78,11 +73,11 @@ package object core
             // if the type is provided - we just leave as is
             case Some(tpe) => x
           }
-          case x: core.SRCollectionType => optRequiredType match {
+          case x: core.SRCollection => optRequiredType match {
             case None => x.drop
             case Some(tpe) => x match {
               // for the array type check => iterate thru the  children 
-              case xx @ core.SRVector => core.SRVector(xx.name, xx.b, 
+              case xx: core.SRVector => core.SRVector(xx.name, xx.b, 
                 iterate(xx.t, Some(tpe.asInstanceOf[ArrayType].elementType)), 
                 xx.split, xx.isTop)
               // for the rest just assign x. Map should come in full or String...
@@ -91,11 +86,11 @@ package object core
           }
           case x: core.SRNull => optRequiredType match {
             case None => x.drop
-            case Some(type) => x
+            case Some(tpe) => x
           }
           case x: core.SRUnknown => optRequiredType match {
             case None => x.drop
-            case Some(type) => x
+            case Some(tpe) => x
           }
           case x: core.SRComposite => 
             if (x.split) optRequiredType match {
@@ -103,13 +98,16 @@ package object core
                 x.drop
               case Some(tpe) => 
                 // composite is split and is in the required schema
-                core.SRComposite(x.name, x.b, 
-                  // tpe must be StructType
+                if (x.members.size == 0) x
+                else core.SRComposite(x.name, x.b, 
+                  // tpe must be StructType 
                   tpe.asInstanceOf[StructType].fields.map({
                     case field => iterate(x.members.find(
-                      // find the guy by name
-                      // assume that it is foudn! otherwise head will gen an exception
-                      {case t => t.name==field.name}).head, 
+                      _.toName==field.name) match {
+                        case Some(a) => a
+                        case None => 
+                          throw new Exception("An empty Composite being searched")}
+                    , 
                     Some(field.dataType))}), x.split, x.isTop, x.isBase)
             } else optRequiredType match {
               case None => 
@@ -117,15 +115,16 @@ package object core
                 x.drop
               case Some(tpe) => 
                 // this composite is not splittable
-                core.SRComposite(x.name, x.b, 
+                if (x.members.size == 0) x
+                else core.SRComposite(x.name, x.b, 
                   x.members.map {case m => iterate(m, 
                     tpe.asInstanceOf[StructType].fields.find 
-                      {case field => field.name == m.name}.map(_.dataType)
+                      {case field => field.name == m.toName}.map(_.dataType)
                   )},
                   x.split, x.isTop, x.isBase)
                 
             }
-          case t: core.SRType => optRequiredType match {
+          case x: core.SRType => optRequiredType match {
             case None => x.drop
             case Some(tpe) => x
           }
@@ -134,7 +133,7 @@ package object core
 
     // these are top branches -> root and requiredRoot must match here!
     core.SRRoot(root.name, root.entries, 
-      root.types zip requiredRoot.types map { 
+      root.types zip requiredSchema.fields.map(_.dataType) map { 
         case (left, right) => iterate(left, Some(right))})
   }
 
@@ -166,7 +165,7 @@ package object core
         case 'L' => core.SRLong(nameToUse, b, leaf)
         case 'l' => core.SRLong(nameToUse, b, leaf)
         case 'O' => core.SRBoolean(nameToUse, b, leaf)
-        case _ => core.SRNull
+        case _ => core.SRNull()
       }
     }
 
@@ -198,7 +197,7 @@ package object core
     }
 
     def synthesizeLeafElement(b: TBranch, leaf: TLeafElement): core.SRType = {
-      return core.SRNull;
+      return core.SRNull();
     }
 
     /**
@@ -252,7 +251,7 @@ package object core
       case 17 => core.SRLong("", null, null)
       case 18 => core.SRBoolean("", null, null)
       case 19 => core.SRShort("", null, null)
-      case _ => core.SRNull
+      case _ => core.SRNull()
     }
 
     /*
@@ -376,8 +375,8 @@ package object core
           if (streamerInfo==null) {
             val isCustom = customStreamers.applyOrElse(
               formatNameForPointer(streamerElement.getTypeName), 
-              (x: String) => core.SRNull)
-            if (isCustom != core.SRNull) isCustom
+              (x: String) => core.SRNull())
+            if (!isCustom.isInstanceOf[core.SRNull]) isCustom
             else core.SRUnknown(streamerElement.getName)
           }
           else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
@@ -451,7 +450,7 @@ package object core
 
         // ROOT ones ending with t
         case "Double32_t" => core.SRFloat("", null, null)
-        case _ => core.SRNull
+        case _ => core.SRNull()
       }
     }
 
@@ -536,8 +535,8 @@ package object core
       // check if it's among custom streamers
       //
       val isCustom = customStreamers.applyOrElse(className,
-        (x: String) => core.SRNull)
-      if (isCustom != core.SRNull) return isCustom
+        (x: String) => core.SRNull())
+      if (!isCustom.isInstanceOf[core.SRNull]) return isCustom
 
       // if parsing is unsuccessful, assign null
       if (classTypeString == null || argumentsTypeString == null)
@@ -566,7 +565,7 @@ package object core
               // is it a basic type
               // else synthesize the name again
               val basicType = synthesizeBasicTypeName(valueTypeName)
-              if (basicType == core.SRNull)
+              if (basicType.isInstanceOf[core.SRNull])
                 // not a basic type
                 // can not be composite class - must have a TStreamerInfo
                 // should be some STL - nested => no subbranching
@@ -612,7 +611,7 @@ package object core
             else null
 
           // if there is a matching issue - assign null
-          if (keyTypeString==null || valueTypeString==null) return core.SRNull
+          if (keyTypeString==null || valueTypeString==null) return core.SRNull()
 
           // retrieve the key Type
           val keyStreamerInfo = streamers.applyOrElse(
@@ -621,7 +620,7 @@ package object core
           val keyType = 
             if (keyStreamerInfo == null) {
               // no streamer info
-              if (synthesizeBasicTypeName(keyTypeString) == core.SRNull) 
+              if (synthesizeBasicTypeName(keyTypeString).isInstanceOf[core.SRNull]) 
                 synthesizeClassName(keyTypeString, null, core.SRCollectionType)
               else
                 synthesizeBasicTypeName(keyTypeString)
@@ -640,7 +639,7 @@ package object core
               // is basic type
               // else synthesize the name again
               val basicType = synthesizeBasicTypeName(valueTypeString)
-              if (basicType == core.SRNull)
+              if (basicType.isInstanceOf[core.SRNull])
                 // not a basic type
                 synthesizeClassName(valueTypeString, null,
                   core.SRCollectionType) 
@@ -702,7 +701,7 @@ package object core
           logger.debug(s"We got a pair: first=$firstTypeString second=$secondTypeString")
 
           // if there is a matching issue - assign null
-          if (firstTypeString==null || secondTypeString==null) return core.SRNull
+          if (firstTypeString==null || secondTypeString==null) return core.SRNull()
 
           //  streamer info for first/second
           val streamerInfoFirst = streamers.applyOrElse(
@@ -719,7 +718,7 @@ package object core
               // is basic type
               // else synthesize the name again
               val basicType = synthesizeBasicTypeName(firstTypeString)
-              if (basicType == core.SRNull)
+              if (basicType.isInstanceOf[core.SRNull])
                 // not a basic type
                 synthesizeClassName(firstTypeString, 
                   if (b==null) null
@@ -741,7 +740,7 @@ package object core
               // is basic type
               // else synthesize the name again
               val basicType = synthesizeBasicTypeName(secondTypeString)
-              if (basicType == core.SRNull)
+              if (basicType.isInstanceOf[core.SRNull])
                 // not a basic type
                 synthesizeClassName(secondTypeString,
                   if (b==null) null
@@ -781,7 +780,7 @@ package object core
                 if (b.getBranches.size==0) false else true, false)
             }
         }
-        case _ => core.SRNull
+        case _ => core.SRNull()
       }
     }
 
@@ -946,7 +945,7 @@ package object core
               case _ => core.SRSTLString(streamerSTL.getName, b, true)
             }
         }
-        case _ => core.SRNull
+        case _ => core.SRNull()
       }
     }
 
@@ -980,7 +979,7 @@ package object core
         typeName=x.getTypeName) 
         if (typeName==s"vector<${streamerInfo.getName}>" ||
             typeName==s"${streamerInfo.getName}*")
-          return core.SRNull
+          return core.SRNull()
 
       // regular sequence of synthesis
       if (elements.size==0) // that is some empty class
@@ -994,7 +993,7 @@ package object core
       else if (streamerInfo.getName == "TClonesArray") {
         if (b == null) {
           // only for clone that occupy a branch.
-          core.SRNull
+          core.SRNull()
         }else {
           // get the name of the object in the TClonesArray
           val typeName = b.getClonesName
@@ -1211,7 +1210,7 @@ package object core
       val subs = b.getBranches
       if (streamerElement==null) {
         // top branch
-        core.SRNull // should not be the case
+        core.SRNull() // should not be the case
       }
       else synthesizeStreamerElement(b, streamerElement, parentType)
     }
@@ -1238,20 +1237,25 @@ package object core
   /*
    * Section for some utils
    */
-  def findTree(dir: TDirectory, name: Option[String] = None): TTree = // find the Tree
+  def findTree(dir: TDirectory, name: Option[String] = None): Option[TTree] = 
   {
     for (i <- 0 until dir.nKeys) {
       val key = dir.getKey(i).asInstanceOf[TKey]
-      if (key.getObjectClass.getClassName == "TDirectory")
-        findTree(key.getObject.asInstanceOf[TDirectory])
+      if (key.getObjectClass.getClassName == "TDirectory") 
+        findTree(key.getObject.asInstanceOf[TDirectory], name) match {
+          case Some(tree) => return Some(tree)
+          case None => ()
+        }
       else if (key.getObjectClass.getClassName == "TTree") 
         name match {
-          case Some(nnn) if nnn==key.getName => return key.getObject.asInstanceOf[TTree]
-          case None => return key.getObject.asInstanceOf[TTree]
-          case _ => ()
+          case Some(nnn) if nnn==key.getName => 
+            return Some(key.getObject.asInstanceOf[TTree])
+          case None => return Some(key.getObject.asInstanceOf[TTree])
+          case _ => None
         }
     }
-    null
+
+    None
   }
 
   /**

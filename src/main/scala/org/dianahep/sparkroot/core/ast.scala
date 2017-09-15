@@ -1161,20 +1161,25 @@ package object core
   /*
    * Section for some utils
    */
-  def findTree(dir: TDirectory, name: Option[String] = None): TTree = // find the Tree
+  def findTree(dir: TDirectory, name: Option[String] = None): Option[TTree] = // find the Tree
   {
     for (i <- 0 until dir.nKeys) {
       val key = dir.getKey(i).asInstanceOf[TKey]
-      if (key.getObjectClass.getClassName == "TDirectory")
-        findTree(key.getObject.asInstanceOf[TDirectory])
+      if (key.getObjectClass.getClassName == "TDirectory") 
+        findTree(key.getObject.asInstanceOf[TDirectory], name) match {
+          case Some(tree) => return Some(tree)
+          case None => ()
+        }
       else if (key.getObjectClass.getClassName == "TTree") 
         name match {
-          case Some(nnn) if nnn==key.getName => return key.getObject.asInstanceOf[TTree]
-          case None => return key.getObject.asInstanceOf[TTree]
-          case _ => ()
+          case Some(nnn) if nnn==key.getName => 
+            return Some(key.getObject.asInstanceOf[TTree])
+          case None => return Some(key.getObject.asInstanceOf[TTree])
+          case _ => None
         }
     }
-    null
+    
+    None
   }
 
   /**

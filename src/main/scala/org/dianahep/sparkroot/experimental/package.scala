@@ -47,6 +47,18 @@ package object experimental {
  *  DefaultSource is used if no registration of the Source has been explicitly made!!
  */
 package experimental {
+  sealed trait NoTTreeThrowable {
+    seld: Throwable =>
+    val optTreeName: Option[String]
+  }
+
+  case class NoTTreeException(
+      override val optTreeName: Option[String] = None)
+      extends Exception(optTreeName match {
+        case Some(treeName) => s"No TTree ${treeName} found"
+        case None => "No TTree found"
+      }) with NoTTreeThrowable;
+
   /** TTree Iterator */
   class TTreeIterator(
       tree: TTree,
@@ -55,12 +67,15 @@ package experimental {
       filters: Array[Filter]) extends Iterator[Row] {
     private val tt = {
       val tmp = buildATT(tree, streamers, Some(requiredSchema))
-      tmp match {
+      val prunedTT = tmp match {
         // If we have top columns in the select statement =>
         // prune the root with the required schema
         case root @ SRRoot(_, _, _) => pruneATT(root, requiredSchema)
         case _ => tmp
       }
+      logger.info(s"Final PrunedTT = \n${printATT(prunedTT)}")
+      logger.info(s"requiredSchema = \n${requiredSchema.treeString}")
+      prunedTT
     }
     def hasNext = containsNext(tt)
     def next() = readSparkRow(tt)
@@ -86,8 +101,11 @@ package experimental {
       logger.info(s"Building the Abstractly Typed Tree... for treeName=$treeName")
       files.map(_.getPath.toString).foreach({x: String => logger.info(s"pathname = $x")})
       val reader = new RootFileReader(files.head.getPath.toString)
-      Some(buildSparkSchema(
-        buildATT(findTree(reader.getTopDir, treeName), arrangeStreamers(reader), None)))
+      findTree(reader.getTopDir, treeName) match {
+        case Some(tree) => Some(buildSparkSchema(
+          buildATT(tree, arrangeStreamers(reader), None)))
+        case None => throw NoTTreeException(treeName)
+      }
     }
 
     /** reading function */
@@ -101,8 +119,8 @@ package experimental {
         hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
       logger.info(s"buildReaderWithPartitionValues...")
       logger.info(s"dataColumns: ${dataSchema.fields.map(_.name).toSeq}")
-      logger.info(s"partitionColumns: ${partitionSchema.fields.map(_.name).toSeq}")
-      logger.info(s"partitionSchema: \n${requiredSchema.treeString}")
+      logger.info(s"partitionSchema: ${partitionSchema.fields.map(_.name).toSeq}")
+      logger.info(s"requiredSchema: \n${requiredSchema.treeString}")
       logger.info(s"$options")
 //      buildReader(sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
       
@@ -110,7 +128,10 @@ package experimental {
       (file: PartitionedFile) => {
         val treeName = options.get("tree")
         val reader = new RootFileReader(file.filePath)
-        val ttree = findTree(reader, treeName);
+        val ttree = findTree(reader, treeName) match {
+          case Some(tree) => tree
+          case None => throw NoTTreeException(treeName)
+        }
         val iter = new TTreeIterator(ttree, arrangeStreamers(reader),
           requiredSchema, filters.toArray)
 

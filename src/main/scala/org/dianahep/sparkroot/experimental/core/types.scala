@@ -83,11 +83,11 @@ case class SRUnknown(
   override def hasNext = false
   override val toSparkType = NullType
 
-  override def drop: SRUnknown(name, true)
+  override def drop = SRUnknown(name, true)
 }
 
 case class SRNull(
-    override val _shouldRop: Boolean = false) extends SRType("Null", _shouldDrop) {
+    override val _shouldDrop: Boolean = false) extends SRType("Null", _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRNull::no name $str")
 
   override def read(b: RootInput) = {
@@ -100,7 +100,7 @@ case class SRNull(
   }
   override def readArray(size: Int) = {
     debugMe(s"readArray($size)")
-    for (i <- 0 until size) yield nulli
+    for (i <- 0 until size) yield null
   }
   override def readArray(buffer: RootInput, size: Int) = {
     debugMe(s"readArray(buffer, $size)")
@@ -146,7 +146,7 @@ case class SRRoot(
 object converter {
   def toSRType(name: String, dataType: DataType): SRType = dataType match {
     case StructType(fields) => SRComposite(name, null, 
-      field.map({field => toSRType(field.name, field.dataType)}), false, false)
+      fields.map {case field => toSRType(field.name, field.dataType)}, false, false)
 
     case StringType => SRString(name, null, null)
     case ShortType => SRShort(name, null, null)
@@ -160,8 +160,8 @@ object converter {
       toSRType("element", elementType), 0)
     case MapType(keyType, valueType, _) => SRMap(name, null,
       toSRType("key", keyType), toSRType("value", valueType), false, false)
-    case NullType => SRNull
-    case _ => SRNull
+    case NullType => SRNull()
+    case _ => SRNull()
   }
 }
 
@@ -192,7 +192,8 @@ case class SREmptyRoot(
 }
 
 case class SRString(
-    override val name: String, b: TBranch, l: TLeaf, val _shouldDrop: Boolean = false) 
+    override val name: String, b: TBranch, l: TLeaf, 
+    override val _shouldDrop: Boolean = false) 
     extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRString::$name $str")
   override def read(buffer: RootInput) = {
@@ -303,7 +304,7 @@ case class SRBoolean(
 case class SRLong(
     override val name: String, b: TBranch, l: TLeaf, 
     override val _shouldDrop: Boolean = false) 
-    extends SRSimpleType(name, b, l, _shuoldDrop) {
+    extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRLong::$name $str")
   override def read(buffer: RootInput) = {
     debugMe("read(buffer)")
@@ -337,7 +338,7 @@ case class SRLong(
 case class SRDouble(
     override val name: String, b: TBranch, l: TLeaf, 
     override val _shouldDrop: Boolean = false)
-    extends SRSimpleType(name, b, l, shouldDrop) {
+    extends SRSimpleType(name, b, l, _shouldDrop) {
   override def debugMe(str: String) = logger.debug(s"SRDouble::$name $str")
   override def read(buffer: RootInput) = {
     debugMe("read(buffer)")
@@ -365,7 +366,7 @@ case class SRDouble(
   override def hasNext = entry<b.getEntries
   override val toSparkType = DoubleType
 
-  override def drop = SRDouble(name, eb, l, true)
+  override def drop = SRDouble(name, b, l, true)
 }
 
 case class SRByte(
@@ -474,7 +475,7 @@ case class SRFloat(
   override def hasNext = entry<b.getEntries
   override val toSparkType = FloatType
 
-  override def drop = SRFloat(name,e b, l, true)
+  override def drop = SRFloat(name, b, l, true)
 }
 
 case class SRArray(
@@ -1109,7 +1110,7 @@ case class SRVector(
       val size = buffer.readInt
 
       val data = 
-        if (t == t.isIntanceOf[SRNull] || t.isInstanceOf[SRUnknown]) Seq()
+        if (t.isInstanceOf[SRNull] || t.isInstanceOf[SRUnknown]) Seq()
         else {
           val composite = t.asInstanceOf[SRComposite]
 
