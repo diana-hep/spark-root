@@ -26,6 +26,7 @@ import org.dianahep.root4j.core.RootInput
 import org.dianahep.root4j._
 import org.dianahep.root4j.interfaces._
 import org.dianahep.sparkroot.experimental.core._
+import org.dianahep.sparkroot.experimental.core.optimizations._
 
 // logging
 import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
@@ -66,16 +67,22 @@ package experimental {
       requiredSchema: StructType,
       filters: Array[Filter]) extends Iterator[Row] {
     private val tt = {
-      val tmp = buildATT(tree, streamers, Some(requiredSchema))
-      val prunedTT = tmp match {
-        // If we have top columns in the select statement =>
-        // prune the root with the required schema
-        case root @ SRRoot(_, _, _) => pruneATT(root, requiredSchema)
+      // build the IR filtering out the unneededtop columns
+      val att = buildATT(tree, streamers, Some(requiredSchema))
+
+      val passesToDo = (Nil :+ PruningPass(requiredSchema)) ++ basicPasses
+
+      val optimizedIR = att match {
+        case root @ SRRoot(_, _, _) => 
+          // do all the optimizations
+          passesToDo.foldLeft(root)({case (tt, pass) => pass.do(tt)})
         case _ => tmp
       }
       logger.info(s"Final PrunedTT = \n${printATT(prunedTT)}")
       logger.info(s"requiredSchema = \n${requiredSchema.treeString}")
-      prunedTT
+      
+      // return the intermediate representation
+      optimizedIR
     }
     def hasNext = containsNext(tt)
     def next() = readSparkRow(tt)
@@ -98,14 +105,26 @@ package experimental {
         options: Map[String, String],
         files: Seq[FileStatus]): Option[StructType] = {
       val treeName = options.get("tree")
+
+      // some logging
       logger.info(s"Building the Abstractly Typed Tree... for treeName=$treeName")
       files.map(_.getPath.toString).foreach({x: String => logger.info(s"pathname = $x")})
+      
+      // open the ROOT file
       val reader = new RootFileReader(files.head.getPath.toString)
-      findTree(reader.getTopDir, treeName) match {
-        case Some(tree) => Some(buildSparkSchema(
-          buildATT(tree, arrangeStreamers(reader), None)))
+
+      // get the TTree and generate the Typed Tree - intermediate representation
+      val optTree = findTree(reader.getTopDir, treeName)
+      val att = optTree match {
+        case Some(tree) => buildATT(tree, arrangeStreamers(reader), None)
         case None => throw NoTTreeException(treeName)
       }
+
+      // apply optimizations
+      val optimizedIR = basicPasses.foldLeft(att)({case (tt, pass) => pass.do(tt)})
+
+      // return the generated schema
+      Some(buildSparkSchema(optimizedIR))
     }
 
     /** reading function */
