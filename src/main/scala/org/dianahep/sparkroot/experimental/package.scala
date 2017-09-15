@@ -72,13 +72,13 @@ package experimental {
 
       val passesToDo = (Nil :+ PruningPass(requiredSchema)) ++ basicPasses
 
-      val optimizedIR = att match {
-        case root @ SRRoot(_, _, _) => 
+      val optimizedIR: SRType = att match {
+        case root: SRRoot => 
           // do all the optimizations
-          passesToDo.foldLeft(root)({case (tt, pass) => pass.do(tt)})
-        case _ => tmp
+          passesToDo.foldLeft(root)({ (tt: core.SRRoot, pass: OptimizationPass) => pass.run(tt)})
+        case _ => att
       }
-      logger.info(s"Final PrunedTT = \n${printATT(prunedTT)}")
+      logger.info(s"Optimized Typed Tree = \n${printATT(optimizedIR)}")
       logger.info(s"requiredSchema = \n${requiredSchema.treeString}")
       
       // return the intermediate representation
@@ -121,7 +121,11 @@ package experimental {
       }
 
       // apply optimizations
-      val optimizedIR = basicPasses.foldLeft(att)({case (tt, pass) => pass.do(tt)})
+      val optimizedIR = att match {
+        case root: core.SRRoot => 
+          basicPasses.foldLeft(root)({case (tt, pass) => pass.run(tt)})
+        case _ => att
+      }
 
       // return the generated schema
       Some(buildSparkSchema(optimizedIR))
