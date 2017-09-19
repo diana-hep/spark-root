@@ -92,6 +92,13 @@ package experimental {
   class DefaultSource extends FileFormat {
     override def toString: String = "root"
 
+    override def isSplittable(
+        spark: SparkSession,
+        options: Map[String, String],
+        path: Path): Boolean = {
+      true
+    }
+
     /** No writing at this point */
     override def prepareWrite(
         sparkSession: SparkSession,
