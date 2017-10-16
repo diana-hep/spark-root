@@ -9,12 +9,59 @@ package object optimizations {
     def run(x: SRRoot): SRRoot
   }
 
-  case object RemoveNullTypePass extends OptimizationPass {
-    private def iterate(t: SRType): SRType = t
+  // Soft = do not check the presence of the non-null branch....
+  // Affects reading of non-splitted types. Because if you remove something from the 
+  // schema, you are expected to still read that member to get 
+  // to the members down the line. 
+  //  (nested as well) e.g. array<array<array<NULL>>>
+  case object SoftRemoveNullTypePass extends OptimizationPass {
+    private def notNull(t: SRType): Boolean =
+      !(t.isInstanceOf[SRNull] || t.isInstanceOf[SRUnknown])
+    private def collectionWithNull(t: SRType): Boolean = t match {
+      case x: SRVector => collectionWithNull(x.t)
+      case x: SRMap => collectionWithNull(x.valueType) || collectionWithNull(x.keyType)
+      case x: SRMultiMap => collectionWithNull(x.valueType) || 
+        collectionWithNull(x.keyType)
+      case x: SRArray => collectionWithNull(x.t)
+      case x: SRNull => true
+      case x: SRUnknown => true
+      case _ => false
+    }
+    private def notCollectionWithNull(t: SRType): Boolean =
+      !collectionWithNull(t)
+    private def iterate(t: SRType): SRType = t match {
+      // assume that t is a valid non-Null type!
+      case x: SRComposite => 
+        if (x.split)
+          SRComposite(x.name, x.b,
+            x.members.filter({case y => notNull(y) && notCollectionWithNull(y)}).map(
+              iterate(_)), 
+            x.split, x.isTop, x.isBase, x._shouldDrop)
+        else
+          SRComposite(x.name, x.b,
+            x.members.map({case m => 
+              if (notNull(m) && notCollectionWithNull(m))
+                iterate(m)
+              else
+                m.drop
+            }), x.split, x.isTop, x.isBase, x._shouldDrop)
+      case x: SRVector => SRVector(
+        x.name, x.b, iterate(x.t), x.split, x.isTop, x._shouldDrop)
+      case x: SRMap => SRMap(
+        x.name, x.b, iterate(x.keyType), iterate(x.valueType),
+        x.split, x.isTop, x._shouldDrop)
+      case x: SRMultiMap => SRMultiMap(
+        x.name, x.b, iterate(x.keyType), iterate(x.valueType),
+        x.split, x.isTop, x._shouldDrop)
+      case x: SRArray => iterate(x.t)
+      case _ => t
+    }
     
     def run(root: SRRoot): SRRoot = 
-      // assume there are no top level nulls
-      SRRoot(root.name, root.entries, root.types.map(iterate(_)))
+      // assume there are no top level nulls or collection of null
+      SRRoot(root.name, root.entries, root.types.filter({
+        case x => notNull(x) && notCollectionWithNull(x)
+      }).map(iterate(_)))
   }
 
   case object RemoveEmptyRowPass extends OptimizationPass {
@@ -29,7 +76,8 @@ package object optimizations {
         else 
           // if not split => mark the empty rows (members) for dropping
           SRComposite(x.name, x.b,
-            x.members.map {case m => if (checkIfEmptyComposite(m)) m.drop else m}, 
+            x.members.map {case m => 
+              if (checkIfEmptyComposite(m)) m.drop else iterate(m)}, 
             x.split, x.isTop, x.isBase, x._shouldDrop)
         case x: SRVector => 
           // assume for now that t is not an empty composite!
@@ -47,7 +95,7 @@ package object optimizations {
     }
 
     private def checkIfEmptyComposite(t: SRType) = t match {
-      case x: SRComposite => x.members.size==0
+      case x: SRComposite => x.members.filterNot(_.shouldDrop).size==0
       case _ => false
     }
 
@@ -63,11 +111,9 @@ package object optimizations {
     // If a member is a base itself => descend further
     private def descend(newMembers: ListBuffer[SRType], 
         base: SRComposite): Unit = {
-      println("descending")
       for (member <- base.members) member match {
         // member is a base composite
         case y @ SRComposite(_, _, _, _, _, true, _) => {
-          println("double descend")
           descend(newMembers, y)
         }
         // member is not a base composite
@@ -90,13 +136,10 @@ package object optimizations {
         val newMembers = ListBuffer.empty[SRType]
         for (member <- x.members) member match {
           case SRComposite(_, _, _, _, _, true, _) => {
-            println("base")
             descend(newMembers, member.asInstanceOf[SRComposite])
           }
-          case _ => {println("not base");newMembers += iterate(member)}
+          case _ => newMembers += iterate(member)
         }
-        println(s"newMembers for ${x.name}:")
-        for (x <- newMembers) println(s"x = $x")
         SRComposite(x.name, x.b, newMembers, x.split, x.isTop, x.isBase, x._shouldDrop)
       }
       // unknowns/nulls/strings...
@@ -105,7 +148,6 @@ package object optimizations {
 
     def run(root: SRRoot): SRRoot = {
       // there must be at least some non-empty top level columns
-      println("running FlattenOutBasePass")
       SRRoot(root.name, root.entries, root.types.map(iterate(_)))
     }
   }
@@ -124,9 +166,12 @@ package object optimizations {
         case None => x.drop
         case Some(tpe) => x match {
           // for the array type check => iterate thru the  children
-          case xx: SRVector => SRVector(xx.name, xx.b,
+          case xx: SRVector => {
+            println(s"xx.name = ${xx.name}")
+            SRVector(xx.name, xx.b,
             iterate(xx.t, Some(tpe.asInstanceOf[ArrayType].elementType)),
             xx.split, xx.isTop)
+          }
               // for the rest just assign x. Map should come in full or String...
           case _ => x
         }
@@ -164,12 +209,15 @@ package object optimizations {
           case Some(tpe) =>
             // this composite is not splittable
             if (x.members.size == 0) x
-            else SRComposite(x.name, x.b,
+            else {
+              println(s"x.name = ${x.name}")
+              SRComposite(x.name, x.b,
               x.members.map {case m => iterate(m,
                 tpe.asInstanceOf[StructType].fields.find
                   {case field => field.name == m.toName}.map(_.dataType)
               )},
               x.split, x.isTop, x.isBase)
+            }
         }
       case x: SRType => optRequiredType match {
         case None => x.drop
@@ -186,6 +234,8 @@ package object optimizations {
   }
 
   val basicPasses: Seq[OptimizationPass] = (Nil :+ RemoveEmptyRowPass 
-    :+ FlattenOutBasePass) //\
+    :+ FlattenOutBasePass 
+    :+ SoftRemoveNullTypePass :+ RemoveEmptyRowPass //\
+  )
 //    :+ FlattenOutBasePass
 }
