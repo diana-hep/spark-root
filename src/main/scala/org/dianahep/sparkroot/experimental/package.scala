@@ -67,10 +67,12 @@ package experimental {
       requiredSchema: StructType,
       filters: Array[Filter]) extends Iterator[Row] {
     private val tt = {
-      // build the IR filtering out the unneededtop columns
+      // build the IR filtering out the unneededtop top columns
       val att = buildATT(tree, streamers, Some(requiredSchema))
 
-      val passesToDo = (Nil :+ PruningPass(requiredSchema)) ++ basicPasses
+//      val passesToDo = (Nil :+ PruningPass(requiredSchema)) ++ basicPasses
+      // NOTE: basicPasses come first as it takes also a modified schema
+      val passesToDo = basicPasses :+ PruningPass(requiredSchema)
 
       val optimizedIR: SRType = att match {
         case root: SRRoot => 

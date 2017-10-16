@@ -1078,8 +1078,9 @@ package object core
               val sInfo = streamers.applyOrElse(streamerElement.getName,
                 (x: String) => null)
               // create a composite and recursively iterate the sub branches
+              // remember we are creating a BASE Composite
               core.SRComposite(streamerElement.getName, null,
-                iterate(sInfo, history), true, false)
+                iterate(sInfo, history), true, false, true)
             }
             else {
               // not an STL node
