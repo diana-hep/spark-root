@@ -92,7 +92,7 @@ package experimental {
   class DefaultSource extends FileFormat {
     override def toString: String = "root"
 
-    override def isSplittable(
+    override def isSplitable(
         spark: SparkSession,
         options: Map[String, String],
         path: Path): Boolean = {

@@ -58,86 +58,6 @@ package object core
   def containsNext(att: core.SRType) = att.hasNext
 
   /**
-   * Perform the Pruning of the Typed Tree
-   */
-  def pruneATT(
-      root: core.SRRoot,
-      requiredSchema: StructType): core.SRRoot = {
-    //
-    def iterate(
-        main: core.SRType, 
-        optRequiredType: Option[DataType]): core.SRType = main match {
-          case x: core.SRSimpleType => optRequiredType match {
-            // if type is not provided, this guy shuold be marked for dropping
-            case None => x.drop
-            // if the type is provided - we just leave as is
-            case Some(tpe) => x
-          }
-          case x: core.SRCollection => optRequiredType match {
-            case None => x.drop
-            case Some(tpe) => x match {
-              // for the array type check => iterate thru the  children 
-              case xx: core.SRVector => core.SRVector(xx.name, xx.b, 
-                iterate(xx.t, Some(tpe.asInstanceOf[ArrayType].elementType)), 
-                xx.split, xx.isTop)
-              // for the rest just assign x. Map should come in full or String...
-              case _ => x
-            }
-          }
-          case x: core.SRNull => optRequiredType match {
-            case None => x.drop
-            case Some(tpe) => x
-          }
-          case x: core.SRUnknown => optRequiredType match {
-            case None => x.drop
-            case Some(tpe) => x
-          }
-          case x: core.SRComposite => 
-            if (x.split) optRequiredType match {
-              case None => // should not happen!
-                x.drop
-              case Some(tpe) => 
-                // composite is split and is in the required schema
-                if (x.members.size == 0) x
-                else core.SRComposite(x.name, x.b, 
-                  // tpe must be StructType 
-                  tpe.asInstanceOf[StructType].fields.map({
-                    case field => iterate(x.members.find(
-                      _.toName==field.name) match {
-                        case Some(a) => a
-                        case None => 
-                          throw new Exception("An empty Composite being searched")}
-                    , 
-                    Some(field.dataType))}), x.split, x.isTop, x.isBase)
-            } else optRequiredType match {
-              case None => 
-                // this composite should be read in but dropped
-                x.drop
-              case Some(tpe) => 
-                // this composite is not splittable
-                if (x.members.size == 0) x
-                else core.SRComposite(x.name, x.b, 
-                  x.members.map {case m => iterate(m, 
-                    tpe.asInstanceOf[StructType].fields.find 
-                      {case field => field.name == m.toName}.map(_.dataType)
-                  )},
-                  x.split, x.isTop, x.isBase)
-                
-            }
-          case x: core.SRType => optRequiredType match {
-            case None => x.drop
-            case Some(tpe) => x
-          }
-    }
-      
-
-    // these are top branches -> root and requiredRoot must match here!
-    core.SRRoot(root.name, root.entries, 
-      root.types zip requiredSchema.fields.map(_.dataType) map { 
-        case (left, right) => iterate(left, Some(right))})
-  }
-
-  /**
    * Build ATT - Abractly Typed Tree
    *
    * @return ATT
@@ -272,7 +192,27 @@ package object core
         if (dimsToGo==1) core.SRArray(streamerElement.getName, b,
           if (b==null) null
           else b.getLeaves.get(0).asInstanceOf[TLeafElement], 
-          synthesizeBasicStreamerType(streamerElement.getType-20),
+          synthesizeBasicStreamerType(streamerElement.getType-20) match {
+            case core.SRNull(_) => synthesizeStreamerElement(b,
+              new TStreamerElement {
+                def getArrayDim = streamerElement.getArrayDim
+                // TODO - what does this method stand for???
+                def getArrayLength = streamerElement.getArrayLength
+                def getMaxIndex = streamerElement.getMaxIndex
+                def getSize = streamerElement.getSize
+                def getType = streamerElement.getType - 20
+                def getTypeName = streamerElement.getTypeName
+                def getName = streamerElement.getName
+                def getTitle = streamerElement.getTitle
+                def getBits = streamerElement.getBits
+                def getUniqueID = streamerElement.getUniqueID
+                def getRootClass = streamerElement.getRootClass
+              },
+              parentType
+            )
+            case x @ _ => x
+          }
+          ,
           streamerElement.getMaxIndex()(streamerElement.getArrayDim-1))
       else
         core.SRArray(streamerElement.getName, b,
@@ -285,6 +225,7 @@ package object core
         case 0 => { // BASE CLASS
           // assume for now that the inheritance is from composite classes
           // NOTE: get the name instead of type name for the super class
+          logger.debug(s"case 0 => streamerElement.getTypeName = ${streamerElement.getTypeName} streamerElement.getName = ${streamerElement.getName}")
           val streamerInfo = streamers.applyOrElse(streamerElement.getName,
           (x: String) => null)
           if (streamerInfo==null) core.SRUnknown(streamerElement.getName)
@@ -359,6 +300,7 @@ package object core
           if (b==null) null
           else b.getLeaves.get(0).asInstanceOf[TLeafElement])
         case it if 21 until 40 contains it => iterateArray(streamerElement.getArrayDim)
+        case it if 81 until 89 contains it => iterateArray(streamerElement.getArrayDim)
         case 61 => {
           // NOTE: get the type name
           val streamerInfo = streamers.applyOrElse(
@@ -386,14 +328,18 @@ package object core
         // TObject
         case 66 => {
           // NOTE: get the typename
-          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
-            (x: String) => null)
+          logger.debug(s"case 66 => streamerElement.getTypeName = ${streamerElement.getTypeName} streamerElement.getName = ${streamerElement.getName}")
+          val streamerInfo = streamers.applyOrElse(
+            if (streamerElement.getTypeName == "BASE")
+              streamerElement.getName
+            else 
+              streamerElement.getTypeName, (x: String) => null)
           if (streamerInfo==null) core.SRUnknown(streamerElement.getName)
           else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
         }
         case 67 => {
           // NOTE: get the typename
-          val streamerInfo = streamers.applyOrElse(streamerElement.getName,
+          val streamerInfo = streamers.applyOrElse(streamerElement.getTypeName,
             (x: String) => null)
           if (streamerInfo==null) core.SRUnknown(streamerElement.getName)
           else synthesizeStreamerInfo(b, streamerInfo, streamerElement, parentType)
@@ -1119,7 +1065,10 @@ package object core
           logger.debug(s"StreamerElement: type=${streamerElement.getType} name=${streamerElement.getName} typeName=${streamerElement.getTypeName}")
 
           val ttt = streamerElement.getType
-          if (ttt == 0) { 
+          // TODO: streamerElement.getName=="BASE" 
+          // should not be there! For some reason ttt will be 66, although this the 
+          // BASE class
+          if (ttt == 0 || (streamerElement.getTypeName=="BASE" && ttt==66)) { 
             // this is the BASE class
             if (b.getType==4 || b.getType==3) {
               // STL node - everything is flattened
@@ -1145,9 +1094,9 @@ package object core
                 core.SRCompositeType, true)
             }
           }
-          else if (ttt < 61 || ttt == 500) {
-            // basic type or anything that is of STL type goes into 
-            // element synthesis
+          else if (ttt < 61 || ttt == 500 || (ttt>=81 && ttt<=89)) {
+            // basic type or anything that is of STL type or type with an offsetL
+            // goes into element synthesis
 
             // find the branch for it!
             val sub = findBranch(streamerElement.getName, history)
