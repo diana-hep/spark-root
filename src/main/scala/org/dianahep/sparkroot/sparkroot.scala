@@ -118,7 +118,7 @@ package object sparkroot {
       val localOptTreeName = optTreeName  
 
       // parallelize over all the files
-      val r = sqlContext.sparkContext.parallelize(inputPathFiles).
+      val r = sqlContext.sparkContext.parallelize(inputPathFiles, inputPathFiles.size).
         flatMap({pathName =>
           logger.info(s"Opening file $pathName")
           val reader = new RootFileReader(pathName)
