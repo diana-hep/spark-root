@@ -167,7 +167,6 @@ package object optimizations {
         case Some(tpe) => x match {
           // for the array type check => iterate thru the  children
           case xx: SRVector => {
-            println(s"xx.name = ${xx.name}")
             SRVector(xx.name, xx.b,
             iterate(xx.t, Some(tpe.asInstanceOf[ArrayType].elementType)),
             xx.split, xx.isTop)
@@ -210,7 +209,6 @@ package object optimizations {
             // this composite is not splittable
             if (x.members.size == 0) x
             else {
-              println(s"x.name = ${x.name}")
               SRComposite(x.name, x.b,
               x.members.map {case m => iterate(m,
                 tpe.asInstanceOf[StructType].fields.find
@@ -235,7 +233,7 @@ package object optimizations {
 
   val basicPasses: Seq[OptimizationPass] = (Nil :+ RemoveEmptyRowPass 
     :+ FlattenOutBasePass 
-    :+ SoftRemoveNullTypePass :+ RemoveEmptyRowPass //\
+//    :+ SoftRemoveNullTypePass :+ RemoveEmptyRowPass //\
   )
 //    :+ FlattenOutBasePass
 }
