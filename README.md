@@ -3,6 +3,8 @@
 
 **Current Release is on Maven Central: 0.1.13**
 
+[![DOI](https://zenodo.org/badge/72210073.svg)](https://zenodo.org/badge/latestdoi/72210073)
+
 Connect [ROOT](https://root.cern.ch/) to [ApacheSpark](http://spark.apache.org/) to be able to read ROOT TTrees, infer the schema and manipulate the data via Spark's DataFrames/Datasets/RDDs.
 
 ## Current Limitations
