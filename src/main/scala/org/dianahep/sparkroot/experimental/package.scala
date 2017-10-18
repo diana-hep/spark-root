@@ -32,7 +32,7 @@ import org.dianahep.sparkroot.experimental.core.optimizations._
 import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 
 package object experimental {
-  @transient lazy val logger = LogManager.getLogger("SparkRoot")
+  @transient lazy val logger = LogManager.getLogger("spark-root")
 
   /**
    * An impolicit DataFrame Reader
@@ -70,14 +70,17 @@ package experimental {
       // build the IR filtering out the unneededtop top columns
       val att = buildATT(tree, streamers, Some(requiredSchema))
 
-//      val passesToDo = (Nil :+ PruningPass(requiredSchema)) ++ basicPasses
-      // NOTE: basicPasses come first as it takes also a modified schema
-      val passesToDo = basicPasses :+ PruningPass(requiredSchema)
+      val advancedPasses = Nil :+ PruningPass(requiredSchema)
 
+      // optimize the IR
       val optimizedIR: SRType = att match {
-        case root: SRRoot => 
-          // do all the optimizations
-          passesToDo.foldLeft(root)({ (tt: core.SRRoot, pass: OptimizationPass) => pass.run(tt)})
+        case root: SRRoot => {
+          // NOTE: basicPasses come first!
+          val ir = basicPasses.foldLeft(root)({ (tt: core.SRRoot, pass: OptimizationPass) => pass.run(tt)})
+          logger.info(s"Intermediate represenation after basic passes = \n${printATT(ir)}")
+          advancedPasses.foldLeft(ir)({(tt: core.SRRoot, pass: OptimizationPass) => 
+            pass.run(tt)})
+        }
         case _ => att
       }
       logger.info(s"Optimized Typed Tree = \n${printATT(optimizedIR)}")
@@ -137,7 +140,8 @@ package experimental {
       }
 
       // return the generated schema
-      Some(buildSparkSchema(optimizedIR))
+      val sparkSchema = buildSparkSchema(optimizedIR)
+      Some(sparkSchema)
     }
 
     /** reading function */
@@ -150,12 +154,9 @@ package experimental {
         options: Map[String, String],
         hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
       logger.info(s"buildReaderWithPartitionValues...")
-      logger.info(s"dataColumns: ${dataSchema.fields.map(_.name).toSeq}")
       logger.info(s"partitionSchema: ${partitionSchema.fields.map(_.name).toSeq}")
       logger.info(s"requiredSchema: \n${requiredSchema.treeString}")
       logger.info(s"$options")
-//      buildReader(sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
-      
       
       (file: PartitionedFile) => {
         val treeName = options.get("tree")

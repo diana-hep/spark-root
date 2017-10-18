@@ -37,7 +37,7 @@ abstract class SRType(val name: String, val _shouldDrop: Boolean = false) {
   // to convert to spark
   val toSparkType: DataType
   // 
-  val toName: String = name.replace('.', '_')
+  val toName: String = name.replace('.', '_').replace("::", "__")
   //val toName: String = name
 
   val shouldDrop: Boolean = _shouldDrop

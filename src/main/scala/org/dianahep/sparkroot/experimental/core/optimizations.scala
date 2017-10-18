@@ -1,10 +1,17 @@
 package org.dianahep.sparkroot.experimental.core
 
+// spark
 import org.apache.spark.sql.types._
 
+// scala std
 import scala.collection.mutable.ListBuffer
 
+// aux
+import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
+
 package object optimizations {
+  @transient lazy val logger = LogManager.getLogger("spark-root")
+
   trait OptimizationPass {
     def run(x: SRRoot): SRRoot
   }
@@ -53,7 +60,7 @@ package object optimizations {
       case x: SRMultiMap => SRMultiMap(
         x.name, x.b, iterate(x.keyType), iterate(x.valueType),
         x.split, x.isTop, x._shouldDrop)
-      case x: SRArray => iterate(x.t)
+      case x: SRArray => SRArray(x.name, x.b, x.l, iterate(x.t), x.n, x._shouldDrop)
       case _ => t
     }
     
@@ -113,7 +120,8 @@ package object optimizations {
         base: SRComposite): Unit = {
       for (member <- base.members) member match {
         // member is a base composite
-        case y @ SRComposite(_, _, _, _, _, true, _) => {
+//        case y @ SRComposite(_, _, _, _, _, true, _) => {
+        case y @ SRComposite(_, _, _, true, _, true, _) => {
           descend(newMembers, y)
         }
         // member is not a base composite
@@ -133,9 +141,10 @@ package object optimizations {
         iterate(x.valueType), x.split, x.isTop, x._shouldDrop)
       case x: SRComposite => {
         // build a new composite with flattened out members for Base Composite members
+        // and only for BASE composites that are also splitted
         val newMembers = ListBuffer.empty[SRType]
         for (member <- x.members) member match {
-          case SRComposite(_, _, _, _, _, true, _) => {
+          case SRComposite(_, _, _, true, _, true, _) => {
             descend(newMembers, member.asInstanceOf[SRComposite])
           }
           case _ => newMembers += iterate(member)
@@ -167,6 +176,8 @@ package object optimizations {
         case Some(tpe) => x match {
           // for the array type check => iterate thru the  children
           case xx: SRVector => {
+            logger.info(s"tpe = \n${tpe}")
+            logger.info(s"x = \n${printATT(x)}")
             SRVector(xx.name, xx.b,
             iterate(xx.t, Some(tpe.asInstanceOf[ArrayType].elementType)),
             xx.split, xx.isTop)
@@ -233,7 +244,7 @@ package object optimizations {
 
   val basicPasses: Seq[OptimizationPass] = (Nil :+ RemoveEmptyRowPass 
     :+ FlattenOutBasePass 
-//    :+ SoftRemoveNullTypePass :+ RemoveEmptyRowPass //\
+    :+ SoftRemoveNullTypePass :+ RemoveEmptyRowPass //\
   )
 //    :+ FlattenOutBasePass
 }

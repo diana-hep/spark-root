@@ -163,7 +163,7 @@ package object core
       case 9 => core.SRFloat("", null, null)
       case 10 => core.SRByte("", null, null)
       case 11 => core.SRByte("", null, null)
-      case 12 => core.SRShort("", null, null)
+      case 12 =>  core.SRShort("", null, null)
       case 13 => core.SRInt("", null, null)
       case 14 => core.SRLong("", null, null)
       case 15 => core.SRInt("", null, null)
@@ -188,7 +188,8 @@ package object core
       ): core.SRType = {
 
       // when you have an array of something simple kOffsetL by ROOT convention  
-      def iterateArray(dimsToGo: Int): core.SRType = 
+      def iterateArray(dimsToGo: Int): core.SRType = {
+        logger.info(s"dimsToGo = ${dimsToGo} for name = ${streamerElement.getName} type = ${streamerElement.getType} typeName = ${streamerElement.getTypeName}")
         if (dimsToGo==1) core.SRArray(streamerElement.getName, b,
           if (b==null) null
           else b.getLeaves.get(0).asInstanceOf[TLeafElement], 
@@ -220,6 +221,7 @@ package object core
           else b.getLeaves.get(0).asInstanceOf[TLeafElement], 
           iterateArray(dimsToGo-1), streamerElement.getMaxIndex()(
             streamerElement.getArrayDim-dimsToGo))
+      }
 
       streamerElement.getType match {
         case 0 => { // BASE CLASS
@@ -315,7 +317,7 @@ package object core
             formatNameForPointer(streamerElement.getTypeName),
             (x: String) => null)
           if (streamerInfo==null) {
-            val isCustom = customStreamers.applyOrElse(
+            val isCustom = tryCustom().applyOrElse(
               formatNameForPointer(streamerElement.getTypeName), 
               (x: String) => core.SRNull())
             if (!isCustom.isInstanceOf[core.SRNull]) isCustom
@@ -378,24 +380,25 @@ package object core
      * Array is also a basic type - leave it out for now
      */
     def synthesizeBasicTypeName(
-      typeName: String // basic type name
+      typeName: String, // basic type name
+      objName: String = ""
     ): core.SRType = {
 
       typeName match {
-        case "int" => core.SRInt("", null, null)
-        case "float" => core.SRFloat("", null, null)
-        case "double" => core.SRDouble("", null, null)
-        case "char" => core.SRByte("", null, null)
-        case "long" => core.SRLong("", null, null)
-        case "short" => core.SRShort("", null, null)
-        case "bool" => core.SRBoolean("", null, null)
-        case "unsigned int" => core.SRInt("", null, null)
-        case "unsigned char" => core.SRByte("", null, null)
-        case "unsigned long" => core.SRLong("", null, null)
-        case "unsigned short" => core.SRShort("", null, null)
+        case "int" => core.SRInt(objName, null, null)
+        case "float" => core.SRFloat(objName, null, null)
+        case "double" => core.SRDouble(objName, null, null)
+        case "char" => core.SRByte(objName, null, null)
+        case "long" => core.SRLong(objName, null, null)
+        case "short" => core.SRShort(objName, null, null)
+        case "bool" => core.SRBoolean(objName, null, null)
+        case "unsigned int" => core.SRInt(objName, null, null)
+        case "unsigned char" => core.SRByte(objName, null, null)
+        case "unsigned long" => core.SRLong(objName, null, null)
+        case "unsigned short" => core.SRShort(objName, null, null)
 
         // ROOT ones ending with t
-        case "Double32_t" => core.SRFloat("", null, null)
+        case "Double32_t" => core.SRFloat(objName, null, null)
         case _ => core.SRNull()
       }
     }
@@ -443,7 +446,8 @@ package object core
     def synthesizeClassName(
       className: String, // c++ standard class type declaration (w/ spaces for templ.)
       b: TBranchElement, // if the branch is split, we still need it
-      parentType: core.SRTypeTag // the tag for what our parent is
+      parentType: core.SRTypeTag, // the tag for what our parent is
+      objName: String = "" // the name of the object being syntehsized
     ): core.SRType = {
       val stlLinear = Seq("vector", "list", "deque", "set", "multiset",
         "forward_list", "unordered_set", "unordered_multiset")
@@ -480,7 +484,7 @@ package object core
       // 
       // check if it's among custom streamers
       //
-      val isCustom = customStreamers.applyOrElse(className,
+      val isCustom = tryCustom(if (b == null) objName else b.getName).applyOrElse(className,
         (x: String) => core.SRNull())
       if (!isCustom.isInstanceOf[core.SRNull]) return isCustom
 
@@ -492,7 +496,7 @@ package object core
       classTypeString match {
         case it if stlBitset == it => {
           // remap this guy to vector of bool
-          synthesizeClassName("vector<bool>", b, parentType)
+          synthesizeClassName("vector<bool>", b, parentType, objName)
         }
         case it if stlLinear contains it => {
           // we have something that is vector like
@@ -531,7 +535,7 @@ package object core
               // this is not the top collection
               case core.SRCollectionType => core.SRVector("", b, valueType,false, false)
               // this is the top collection
-              case _ => core.SRVector("", b, valueType, false, true)
+              case _ => core.SRVector(objName, b, valueType, false, true)
             }
           else
             parentType match {
@@ -663,14 +667,14 @@ package object core
               // no streamer info
               // is basic type
               // else synthesize the name again
-              val basicType = synthesizeBasicTypeName(firstTypeString)
+              val basicType = synthesizeBasicTypeName(firstTypeString, "first")
               if (basicType.isInstanceOf[core.SRNull])
                 // not a basic type
                 synthesizeClassName(firstTypeString, 
                   if (b==null) null
                   else if (b.getBranches.size==0) null
                   else b.getBranches.get(0).asInstanceOf[TBranchElement],
-                  core.SRCompositeType) 
+                  core.SRCompositeType, "first") 
               else basicType
             }
             else {
@@ -685,20 +689,20 @@ package object core
               // no streamer info
               // is basic type
               // else synthesize the name again
-              val basicType = synthesizeBasicTypeName(secondTypeString)
+              val basicType = synthesizeBasicTypeName(secondTypeString, "second")
               if (basicType.isInstanceOf[core.SRNull])
                 // not a basic type
                 synthesizeClassName(secondTypeString,
                   if (b==null) null
                   else if (b.getBranches.size==0) null
                   else b.getBranches.get(1).asInstanceOf[TBranchElement],
-                  core.SRCompositeType) 
+                  core.SRCompositeType, "second") 
               else basicType
             }
             else {
               // there is a TStreamerInfo
               synthesizeStreamerInfo(null, streamerInfoSecond, null,
-                core.SRCompositeType)
+                core.SRCompositeType, false, "second")
             }
 
           // TODO: Do we need a special type for pair???
@@ -877,7 +881,7 @@ package object core
         }
         case 8 => {
           // std::bitset - map it to vector of bool
-          synthesizeClassName("vector<bool>", b, parentType)
+          synthesizeClassName("vector<bool>", b, parentType, streamerSTL.getName)
         }
         case 365 => { // std::string
           if (b == null) 
@@ -900,7 +904,8 @@ package object core
       streamerInfo: TStreamerInfo,
       streamerElement: TStreamerElement, 
       parentType: core.SRTypeTag,
-      flattenable: Boolean = false // is this branch flattenable
+      flattenable: Boolean = false, // is this branch flattenable
+      objName: String = "" // when both b and streamerElement are nulls => this is the name
     ): core.SRType = {
       def shuffleStreamerInfo(sinfo: TStreamerInfo) = {
         val elems = sinfo.getElements
@@ -954,7 +959,7 @@ package object core
       else {
         if (b==null) {
           core.SRComposite(
-            if (streamerElement==null) "" else streamerElement.getName
+            if (streamerElement==null) objName else streamerElement.getName
             , null,
             for (i <- 0 until elements.size)
               yield synthesizeStreamerElement(null, 
@@ -1248,11 +1253,12 @@ package object core
     streamers.mapValues(x => if (x.size==1) x.head else x.foldLeft(x.head)(selectOne))
   }
 
+  def tryCustom(name: String = ""): Map[String, core.SRType] = {
   val customStreamers: Map[String, core.SRType] = Map(
-    "trigger::TriggerObjectType" -> core.SRInt("", null, null),
-    "reco::Muon::MuonTrackType" -> core.SRInt("", null, null),
-    "pat::IsolationKeys" -> core.SRInt("", null, null),
-    "reco::IsoDeposit" -> core.SRInt("", null, null),
+    "trigger::TriggerObjectType" -> core.SRInt(name, null, null),
+    "reco::Muon::MuonTrackType" -> core.SRInt(name, null, null),
+    "pat::IsolationKeys" -> core.SRInt(name, null, null),
+    "reco::IsoDeposit" -> core.SRInt(name, null, null),
     "edm::RefCoreWithIndex" -> core.SRComposite("product_",
       null, 
       Seq(
@@ -1264,4 +1270,6 @@ package object core
       false, false, false
     )
   )
+  return customStreamers
+  }
 }
