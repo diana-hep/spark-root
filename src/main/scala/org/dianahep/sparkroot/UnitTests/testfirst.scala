@@ -33,13 +33,11 @@ object testfirst {
 
   def main() {
 
-    val inputFileName = "/home/pratyush/CERN/spark-root/src/test/resources/test_root4j.root"
+    val inputFileName = "/home/pratyush/CERN/spark-root/src/test/resources/test_root4j.root" //Change to point to project directory
     val conf = new SparkConf().setAppName("Unit Testing test_root4j")
     val spark = SparkSession.builder()
       .master("local")
       .getOrCreate()
-
-    import spark.implicits._
 
     if (compare(spark,inputFileName)){
       System.out.println("Everything is working correctly")
