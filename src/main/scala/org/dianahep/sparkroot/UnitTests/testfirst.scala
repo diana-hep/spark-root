@@ -74,24 +74,25 @@ object testfirst {
     def comparemyintvector()= {
       val da = df.select("myintvector")
       val ds = createdmyintvector()
-      da.show()
-      ds.show()
+      //da.show()
+      //ds.show()
       if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
         println("myintvector Unit Test failed")
         System.exit(0)
       }
     }
 
-    /**def createdmyvector2() : Dataset[Row] = {
-      var c= 0;
-      var finalarr = new Array[Array[Integer]](40000)//Not set to actual upper limit
+    def createdmyvector2() : Dataset[Row] = {
+
       var ds = Seq[myvector2class]()
-      for (i <- 0 to 100){
+      for (i <- 0 to 99){
+        var c=0
+        var finalarr = new Array[Array[Integer]](40000)//Not set to actual upper limit
         for (j <- 0 to ((4*(i+1))-1)){
-          if ((j+1)%2!=0){
+          if ((j+1)%2==0){
             var arraytest = new Array[Integer](2)
             arraytest(0)=0
-            arraytest(1)=0
+            arraytest(1)=1
             finalarr(c)=arraytest
           }
           else {
@@ -115,17 +116,15 @@ object testfirst {
     def comparemyvector2()= {
       val da = df.select("myvector2")
       val ds = createdmyvector2()
-      println(da)
-      println(ds)
-      da.show()
-      ds.show()
+      da.limit(2).show(false)
+      ds.limit(2).show(false)
       if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
         println("myvector2 Unit Test failed")
         System.exit(0)
       }
-    }**/
+    }
     comparemyintvector
-    //comparemyvector2
+    comparemyvector2
     flag
   }
 }
