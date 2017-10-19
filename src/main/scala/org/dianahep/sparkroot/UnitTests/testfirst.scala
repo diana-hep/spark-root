@@ -2,8 +2,10 @@ package org.dianahep.sparkroot.UnitTests
 
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row, SparkSession, DataFrame}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.dianahep.sparkroot._
+
+import scala.collection.mutable
 
 object testfirst {
 
@@ -54,7 +56,7 @@ object testfirst {
       var c= 0;
       var finalarr = new Array[Integer](10000)//Not set to actual upper limit
       var ds = Seq(myintvectorclass(Array()))
-      for (i <- 0 to 100){
+      for (i <- 0 to 98){
         for (j <- 0 to i){
           finalarr(c)=j
           c=c+1
@@ -72,14 +74,58 @@ object testfirst {
     def comparemyintvector()= {
       val da = df.select("myintvector")
       val ds = createdmyintvector()
-      if (da.except(ds).count() != 0 || ds.except(ds).count != 0) {
+      da.show()
+      ds.show()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
         println("myintvector Unit Test failed")
         System.exit(0)
       }
     }
 
+    /**def createdmyvector2() : Dataset[Row] = {
+      var c= 0;
+      var finalarr = new Array[Array[Integer]](40000)//Not set to actual upper limit
+      var ds = Seq[myvector2class]()
+      for (i <- 0 to 100){
+        for (j <- 0 to ((4*(i+1))-1)){
+          if ((j+1)%2!=0){
+            var arraytest = new Array[Integer](2)
+            arraytest(0)=0
+            arraytest(1)=0
+            finalarr(c)=arraytest
+          }
+          else {
+            var arraytest=new Array[Integer](1)
+            arraytest(0)=0
+            finalarr(c)=arraytest
+          }
+          c=c+1
+        }
 
+        var arr = new Array[Array[Integer]](c)
+        for (j <- 0 to c-1){
+          arr(j)=finalarr(j)
+        }
+        ds=ds :+ myvector2class(arr)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparemyvector2()= {
+      val da = df.select("myvector2")
+      val ds = createdmyvector2()
+      println(da)
+      println(ds)
+      da.show()
+      ds.show()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("myvector2 Unit Test failed")
+        System.exit(0)
+      }
+    }**/
     comparemyintvector
+    //comparemyvector2
     flag
   }
 }
