@@ -78,13 +78,14 @@ package object optimizations {
           // if split => filter out the empty rows among the members and 
           // iterate through the rest of the members!
           SRComposite(x.name, x.b, 
-            x.members.filterNot(checkIfEmptyComposite(_)).map(iterate(_)), 
+            x.members.filterNot({ case m =>
+              checkIfEmptyComposite(m) || checkIfCollectionOfEmptyComposite(m)}).map(iterate(_)), 
             x.split, x.isTop, x.isBase, x._shouldDrop)
         else 
           // if not split => mark the empty rows (members) for dropping
           SRComposite(x.name, x.b,
             x.members.map {case m => 
-              if (checkIfEmptyComposite(m)) m.drop else iterate(m)}, 
+              if (checkIfEmptyComposite(m) || checkIfCollectionOfEmptyComposite(m)) m.drop else iterate(m)}, 
             x.split, x.isTop, x.isBase, x._shouldDrop)
         case x: SRVector => 
           // assume for now that t is not an empty composite!
@@ -95,6 +96,8 @@ package object optimizations {
           // same assumptions as for core.SRVector
           SRMap(x.name, x.b, iterate(x.keyType), iterate(x.valueType),
             x.split, x.isTop, x._shouldDrop)
+        case x: SRArray =>
+          SRArray(x.name, x.b, x.l, iterate(x.t), x.n, x._shouldDrop)
         case x: SRMultiMap  =>
           SRMultiMap(x.name, x.b, iterate(x.keyType),
             iterate(x.valueType), x.split, x.isTop, x._shouldDrop)
@@ -105,10 +108,19 @@ package object optimizations {
       case x: SRComposite => x.members.filterNot(_.shouldDrop).size==0
       case _ => false
     }
+    private def checkIfCollectionOfEmptyComposite(t: SRType): Boolean = t match {
+      case x: SRComposite => checkIfEmptyComposite(x)
+      case x: SRVector => checkIfCollectionOfEmptyComposite(x.t)
+      case x: SRArray => checkIfCollectionOfEmptyComposite(x.t)
+      case x: SRMap => checkIfCollectionOfEmptyComposite(x.keyType) || checkIfCollectionOfEmptyComposite(x.valueType)
+      case x: SRMultiMap => checkIfCollectionOfEmptyComposite(x.keyType) || checkIfCollectionOfEmptyComposite(x.valueType)
+      case _ => false
+    }
 
     def run(root: SRRoot): SRRoot = {
       SRRoot(root.name, root.entries, 
         // empty Rows at the top column level are not removed!
+        // empty vector< empty Row>  is not removed at hte top level
         root.types.map(iterate(_)))
     }
   }
