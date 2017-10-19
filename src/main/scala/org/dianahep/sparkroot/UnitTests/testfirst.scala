@@ -33,7 +33,7 @@ object testfirst {
 
   def main() {
 
-    val inputFileName = "/home/pratyush/CERN/spark-root/src/test/resources/test_root4j.root" //Change to point to project directory
+    val inputFileName = "/home/pratyush/CERN/spark-root/src/main/resources/test_root4j.root" //Change to point to project directory
     val conf = new SparkConf().setAppName("Unit Testing test_root4j")
     val spark = SparkSession.builder()
       .master("local")
@@ -52,7 +52,7 @@ object testfirst {
 
     def createdmyintvector() : Dataset[Row] = {
       var c= 0;
-      var finalarr = new Array[Integer](20000)
+      var finalarr = new Array[Integer](10000)//Not set to actual upper limit
       var ds = Seq(myintvectorclass(Array()))
       for (i <- 0 to 100){
         for (j <- 0 to i){
