@@ -200,12 +200,79 @@ object testfirst {
       }
     }
 
+    def createdc() : Dataset[Row] = {
+      var ds = Seq[cclass]()
+      var c : Float = 0
+      for (i <- 0 to 99){
+        ds = ds :+ cclass(c)
+        c=c+1
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparec()= {
+      val da = df.select("c")
+      val ds = createdc()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("c Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdd() : Dataset[Row] = {
+      var ds = Seq[dclass]()
+      var c : Byte = 120
+      for (i <- 0 to 99){
+        ds = ds :+ dclass(c)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def compared()= {
+      val da = df.select("d")
+      val ds = createdd()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("d Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdf() : Dataset[Row] = {
+      var ds = Seq[fclass]()
+      var c = true
+      var d = false
+      for (i <- 0 to 99){
+        if ((i+1)%2!=0){
+          ds = ds :+ fclass(d)
+        }
+        else {
+          ds = ds :+ fclass(c)
+        }
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparef()= {
+      val da = df.select("f")
+      val ds = createdf()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("f Unit Test failed")
+        System.exit(0)
+      }
+    }
+
     comparemyintvector
     comparemyvector2
     comparevofvofDouble
     //compareMuons
     comparea
     compareb
+    comparec
+    compared
+    comparef
 
     flag
   }
