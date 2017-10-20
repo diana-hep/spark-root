@@ -264,6 +264,100 @@ object testfirst {
       }
     }
 
+    def createstr()={
+      var ds = Seq[strclass]()
+      for (i <- 0 to 99){
+        ds = ds :+ strclass("abc")
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparestr()={
+      val da = df.select("str")
+      val ds = createstr()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("comparestr Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdn() : Dataset[Row] = {
+      var ds = Seq[nclass]()
+      for (i <- 0 to 99){
+        ds = ds :+ nclass(i)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparen()= {
+      val da = df.select("n")
+      val ds = createdn()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("n Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdvarr1() : Dataset[Row] = {
+      var ds = Seq(varr1class(Array()))
+      for (i <- 0 to 98){
+        var c = 0
+        var finalarr = new Array[Integer](10000)//Not set to actual upper limit
+        for (j <- 0 to i){
+          finalarr(c)=j
+          c=c+1
+        }
+        var arr = new Array[Integer](c)
+        for (j <- 0 to c-1){
+          arr(j)=finalarr(j)
+        }
+        ds=ds :+ varr1class(arr)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparevarr1()= {
+      val da = df.select("varr1")
+      val ds = createdvarr1()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("varr1 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdvarr2() : Dataset[Row] = {
+      var ds = Seq(varr2class(Array()))
+      for (i <- 0 to 98){
+        var c = 0
+        var a = 0.0
+        var finalarr = new Array[Double](10000)//Not set to actual upper limit
+        for (j <- 0 to i){
+          finalarr(c)=a
+          c=c+1
+          a=a+1.0
+        }
+        var arr = new Array[java.lang.Double](c)
+        for (j <- 0 to c-1){
+          arr(j)=finalarr(j)
+        }
+        ds=ds :+ varr2class(arr)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparevarr2()= {
+      val da = df.select("varr2")
+      val ds = createdvarr2()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("varr2 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
     comparemyintvector
     comparemyvector2
     comparevofvofDouble
@@ -273,6 +367,10 @@ object testfirst {
     comparec
     compared
     comparef
+    comparen
+    comparestr
+    comparevarr1
+    comparevarr2
 
     flag
   }
