@@ -124,6 +124,7 @@ package experimental {
       val treeName = roptions.get("tree")
 
       // some logging
+      logger.info(s"options: ${options}")
       logger.info(s"Building the Abstractly Typed Tree... for treeName=$treeName")
       files.map(_.getPath.toString).foreach({x: String => logger.info(s"pathname = $x")})
       

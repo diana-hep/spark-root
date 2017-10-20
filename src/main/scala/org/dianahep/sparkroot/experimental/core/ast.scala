@@ -189,7 +189,6 @@ package object core
 
       // when you have an array of something simple kOffsetL by ROOT convention  
       def iterateArray(dimsToGo: Int): core.SRType = {
-        logger.info(s"dimsToGo = ${dimsToGo} for name = ${streamerElement.getName} type = ${streamerElement.getType} typeName = ${streamerElement.getTypeName}")
         if (dimsToGo==1) core.SRArray(streamerElement.getName, b,
           if (b==null) null
           else b.getLeaves.get(0).asInstanceOf[TLeafElement], 

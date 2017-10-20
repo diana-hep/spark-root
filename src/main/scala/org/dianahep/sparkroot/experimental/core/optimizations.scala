@@ -24,12 +24,13 @@ package object optimizations {
   trait OptimizationPass {
     def run(x: SRRoot, roptions: ROptions): SRRoot
 
-    val name: String = this.getClass.getSimpleName.filterNot(_=='$')
+    val name: String = this.getClass.getSimpleName.filterNot(_=='$').toLowerCase
 
     val default = false
 
     def shouldRun(roptions: ROptions): Boolean = roptions.get(name) match {
-      case Some(x) => 
+      case Some(x) => {
+        logger.info(s"Optimization ${name} is ${x}")
         // if the option is provided use that!
         if (x.toLowerCase=="off" || x.toLowerCase=="false") 
           false
@@ -37,18 +38,24 @@ package object optimizations {
           true
         else 
           throw UnknownOptionException(x)
-      case None => default
+      }
+      case None => { logger.info(s"Optimization ${name} is defaulted to ${default}"); default }
     }
   }
 
   case object HardRemoveNullTypePass extends OptimizationPass {
+    override val default = true
     private def iterate(t: SRType): SRType = t match {
       // type t occupies a branch that either splittable or that is not splittable
       // but does not contain null
       case x: SRComposite => 
         if (x.split)
           SRComposite(x.name, x.b, x.members.filterNot({case m =>
-            occupiesNonSplittableBranchWithNull(m)}).map(iterate(_)), x.split, x.isTop, x.isBase, x._shouldDrop)
+            // filter out:
+            // 1. members that are null
+            // 2. members that are colelction(recursive of null)
+            // 3. members that occupy a non-splitted branch with a null as a field
+            occupiesNonSplittableBranchWithNull(m) || isNull(m) || collectionWithNull(m)}).map(iterate(_)), x.split, x.isTop, x.isBase, x._shouldDrop)
         else
           x
       case x: SRVector => 
@@ -58,6 +65,21 @@ package object optimizations {
         else 
           x
       case _ => t
+    }
+    private def isNull(t: SRType): Boolean = t match {
+      case x: SRNull => true
+      case x: SRUnknown => true
+      case _ => false
+    }
+    private def collectionWithNull(t: SRType): Boolean = t match {
+      case x: SRVector => collectionWithNull(x.t)
+      case x: SRMap => collectionWithNull(x.valueType) || collectionWithNull(x.keyType)
+      case x: SRMultiMap => collectionWithNull(x.valueType) || 
+        collectionWithNull(x.keyType)
+      case x: SRArray => collectionWithNull(x.t)
+      case x: SRNull => true
+      case x: SRUnknown => true
+      case _ => false
     }
 
     private def containsNull(t: SRType): Boolean = t match {
@@ -104,7 +126,7 @@ package object optimizations {
   // to the members down the line. 
   //  (nested as well) e.g. array<array<array<NULL>>>
   case object SoftRemoveNullTypePass extends OptimizationPass {
-    override val default = true
+    override val default = false
 
     private def notNull(t: SRType): Boolean =
       !(t.isInstanceOf[SRNull] || t.isInstanceOf[SRUnknown])
