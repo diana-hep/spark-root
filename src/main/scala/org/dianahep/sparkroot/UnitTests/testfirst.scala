@@ -1,5 +1,7 @@
 package org.dianahep.sparkroot.UnitTests
 
+
+
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -12,7 +14,7 @@ object testfirst {
   case class myintvectorclass(myintvector : Array[Integer])
   case class myvector2class(myvector2 : Array[Array[Integer]])
   case class vofvofDoubleclass(vofvofDouble : Array[Array[java.lang.Double]])
-  case class Muonsclass(Muons : Array[Array[Null]])
+  //case class Muonsclass(Muons : Array[Array[?]])
   case class aclass(a: Integer)
   case class bclass(b: java.lang.Double)
   case class cclass(c: java.lang.Float)
@@ -121,7 +123,6 @@ object testfirst {
 
     def createdvofvofDouble() : Dataset[Row] = {
       var ds = Seq[vofvofDoubleclass]()
-      var arr = new Array[Array[Double]](1)
       for (i <- 0 to 99){
         ds = ds :+ vofvofDoubleclass(Array())
       }
@@ -138,9 +139,57 @@ object testfirst {
       }
     }
 
+    /**def createdMuons() : Dataset[Row] = {
+      var ds = Seq[Muonsclass]()
+      for (i <- 0 to 99){
+        ds = ds :+ Muonsclass(Array())
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def compareMuons()= {
+      val da = df.select("Muons")
+      val ds = createdMuons()
+      println(da.count())
+      println(ds.count())
+      da.show(false)
+      ds.show(false)
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("Muons Unit Test failed")
+        System.exit(0)
+      }
+    }
+      **/
+
+    def createda() : Dataset[Row] = {
+      var ds = Seq[aclass]()
+      for (i <- 0 to 99){
+        ds = ds :+ aclass(i)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparea()= {
+      val da = df.select("a")
+      val ds = createda()
+      System.out.println(da.count())
+      System.out.println(ds.count())
+      da.show()
+      ds.show()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("a Unit Test failed")
+        System.exit(0)
+      }
+    }
+
     comparemyintvector
     comparemyvector2
     comparevofvofDouble
+    //compareMuons
+    comparea
+
     flag
   }
 }
