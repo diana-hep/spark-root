@@ -34,6 +34,8 @@ import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 package object experimental {
   @transient lazy val logger = LogManager.getLogger("spark-root")
 
+  val availableOptimizations = (basicPasses :+ PruningPass(null)).map(_.name)
+
   /**
    * An impolicit DataFrame Reader
    */
@@ -65,7 +67,9 @@ package experimental {
       tree: TTree,
       streamers: Map[String, TStreamerInfo],
       requiredSchema: StructType,
-      filters: Array[Filter]) extends Iterator[Row] {
+      filters: Array[Filter],
+      roptions: ROptions) 
+    extends Iterator[Row] {
     private val tt = {
       // build the IR filtering out the unneededtop top columns
       val att = buildATT(tree, streamers, Some(requiredSchema))
@@ -76,10 +80,10 @@ package experimental {
       val optimizedIR: SRType = att match {
         case root: SRRoot => {
           // NOTE: basicPasses come first!
-          val ir = basicPasses.foldLeft(root)({ (tt: core.SRRoot, pass: OptimizationPass) => pass.run(tt)})
+          val ir = basicPasses.foldLeft(root)({ (tt: core.SRRoot, pass: OptimizationPass) => pass.run(tt, roptions)})
           logger.info(s"Intermediate represenation after basic passes = \n${printATT(ir)}")
           advancedPasses.foldLeft(ir)({(tt: core.SRRoot, pass: OptimizationPass) => 
-            pass.run(tt)})
+            pass.run(tt, roptions)})
         }
         case _ => att
       }
@@ -116,7 +120,8 @@ package experimental {
         sparkSession: SparkSession,
         options: Map[String, String],
         files: Seq[FileStatus]): Option[StructType] = {
-      val treeName = options.get("tree")
+      val roptions = ROptions(options)
+      val treeName = roptions.get("tree")
 
       // some logging
       logger.info(s"Building the Abstractly Typed Tree... for treeName=$treeName")
@@ -135,7 +140,7 @@ package experimental {
       // apply optimizations
       val optimizedIR = att match {
         case root: core.SRRoot => 
-          basicPasses.foldLeft(root)({case (tt, pass) => pass.run(tt)})
+          basicPasses.foldLeft(root)({case (tt, pass) => pass.run(tt, roptions)})
         case _ => att
       }
 
@@ -153,6 +158,7 @@ package experimental {
         filters: Seq[Filter],
         options: Map[String, String],
         hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+      logger.info(s"options: ${options}")
       logger.info(s"buildReaderWithPartitionValues...")
       logger.info(s"partitionSchema: ${partitionSchema.fields.map(_.name).toSeq}")
       logger.info(s"requiredSchema: \n${requiredSchema.treeString}")
@@ -160,13 +166,14 @@ package experimental {
       
       (file: PartitionedFile) => {
         val treeName = options.get("tree")
+        val roptions = ROptions(options)
         val reader = new RootFileReader(file.filePath)
         val ttree = findTree(reader, treeName) match {
           case Some(tree) => tree
           case None => throw NoTTreeException(treeName)
         }
         val iter = new TTreeIterator(ttree, arrangeStreamers(reader),
-          requiredSchema, filters.toArray)
+          requiredSchema, filters.toArray, roptions)
 
         new Iterator[InternalRow] {
           // encoder to convert from Row to InternalRow

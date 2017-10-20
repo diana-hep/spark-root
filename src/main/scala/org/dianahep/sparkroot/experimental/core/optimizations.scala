@@ -12,8 +12,90 @@ import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 package object optimizations {
   @transient lazy val logger = LogManager.getLogger("spark-root")
 
+  sealed trait UnknownOptionThrowable {
+    seld: Throwable =>
+
+    val option: String
+  }
+  case class UnknownOptionException(override val option: String) 
+    extends Exception(s"Unknown Option provided: ${option}")
+    with UnknownOptionThrowable;
+
   trait OptimizationPass {
-    def run(x: SRRoot): SRRoot
+    def run(x: SRRoot, roptions: ROptions): SRRoot
+
+    val name: String = this.getClass.getSimpleName.filterNot(_=='$')
+
+    val default = false
+
+    def shouldRun(roptions: ROptions): Boolean = roptions.get(name) match {
+      case Some(x) => 
+        // if the option is provided use that!
+        if (x.toLowerCase=="off" || x.toLowerCase=="false") 
+          false
+        else if (x.toLowerCase=="on" || x.toLowerCase=="true")
+          true
+        else 
+          throw UnknownOptionException(x)
+      case None => default
+    }
+  }
+
+  case object HardRemoveNullTypePass extends OptimizationPass {
+    private def iterate(t: SRType): SRType = t match {
+      // type t occupies a branch that either splittable or that is not splittable
+      // but does not contain null
+      case x: SRComposite => 
+        if (x.split)
+          SRComposite(x.name, x.b, x.members.filterNot({case m =>
+            occupiesNonSplittableBranchWithNull(m)}).map(iterate(_)), x.split, x.isTop, x.isBase, x._shouldDrop)
+        else
+          x
+      case x: SRVector => 
+        if (x.split)
+          // if vector is split, then the composite inside will also be split!
+          SRVector(x.name, x.b, iterate(x.t), x.split, x.isTop, x._shouldDrop)
+        else 
+          x
+      case _ => t
+    }
+
+    private def containsNull(t: SRType): Boolean = t match {
+      // check if valid type t contains null inside
+      // assume that t if occupies a branch, the branch is not splitted
+      case x: SRComposite => x.members.map(containsNull(_)).fold(false)(_ || _)
+      case x: SRVector => containsNull(x.t)
+      case x: SRMap => containsNull(x.valueType) || containsNull(x.keyType)
+      case x: SRMultiMap => containsNull(x.valueType) || containsNull(x.keyType)
+      case x: SRArray => containsNull(x.t)
+      case x: SRNull => true
+      case x: SRUnknown => true
+      case _ => false
+    }
+
+    private def occupiesNonSplittableBranchWithNull(t: SRType): Boolean = t match {
+      case x: SRComposite => 
+        if (x.split) false
+        else containsNull(x)
+      case x: SRVector => 
+        if (x.split) false
+        else containsNull(x)
+      case x: SRMap =>
+        if (x.split) false
+        else containsNull(x)
+      case x: SRMultiMap =>
+        if (x.split) false
+        else containsNull(x)
+      case x: SRArray => containsNull(x)
+      case _ => false
+    }
+
+    def run(root: SRRoot, roptions: ROptions): SRRoot = 
+      if (shouldRun(roptions))
+        SRRoot(root.name, root.entries, root.types.filterNot({ case m => 
+          occupiesNonSplittableBranchWithNull(m)}).map(iterate(_)))
+      else
+        root
   }
 
   // Soft = do not check the presence of the non-null branch....
@@ -22,6 +104,8 @@ package object optimizations {
   // to the members down the line. 
   //  (nested as well) e.g. array<array<array<NULL>>>
   case object SoftRemoveNullTypePass extends OptimizationPass {
+    override val default = true
+
     private def notNull(t: SRType): Boolean =
       !(t.isInstanceOf[SRNull] || t.isInstanceOf[SRUnknown])
     private def collectionWithNull(t: SRType): Boolean = t match {
@@ -64,14 +148,19 @@ package object optimizations {
       case _ => t
     }
     
-    def run(root: SRRoot): SRRoot = 
-      // assume there are no top level nulls or collection of null
-      SRRoot(root.name, root.entries, root.types.filter({
-        case x => notNull(x) && notCollectionWithNull(x)
-      }).map(iterate(_)))
+    def run(root: SRRoot, roptions: ROptions): SRRoot = 
+      if (shouldRun(roptions))
+        // assume there are no top level nulls or collection of null
+        SRRoot(root.name, root.entries, root.types.filter({
+          case x => notNull(x) && notCollectionWithNull(x)
+        }).map(iterate(_)))
+      else
+        root
   }
 
   case object RemoveEmptyRowPass extends OptimizationPass {
+    override val default = true
+
     private def iterate(t: SRType): SRType = t match {
       case x: SRComposite => 
         if (x.split) 
@@ -117,15 +206,19 @@ package object optimizations {
       case _ => false
     }
 
-    def run(root: SRRoot): SRRoot = {
-      SRRoot(root.name, root.entries, 
-        // empty Rows at the top column level are not removed!
-        // empty vector< empty Row>  is not removed at hte top level
-        root.types.map(iterate(_)))
+    def run(root: SRRoot, roptions: ROptions): SRRoot = {
+      if (shouldRun(roptions))
+        SRRoot(root.name, root.entries, 
+          // empty Rows at the top column level are not removed!
+          // empty vector< empty Row>  is not removed at hte top level
+          root.types.map(iterate(_)))
+      else
+        root
     }
   }
 
   case object FlattenOutBasePass extends OptimizationPass {
+    override val default = true
     // all of the members of the base should go into newMembers
     // If a member is a base itself => descend further
     private def descend(newMembers: ListBuffer[SRType], 
@@ -167,13 +260,16 @@ package object optimizations {
       case x: SRType => x
     }
 
-    def run(root: SRRoot): SRRoot = {
-      // there must be at least some non-empty top level columns
-      SRRoot(root.name, root.entries, root.types.map(iterate(_)))
-    }
+    def run(root: SRRoot, roptions: ROptions): SRRoot = 
+      if (shouldRun(roptions))
+        // there must be at least some non-empty top level columns
+        SRRoot(root.name, root.entries, root.types.map(iterate(_)))
+      else 
+        root
   }
 
   case class PruningPass(requiredSchema: StructType) extends OptimizationPass {
+    override val default = true
     private def iterate(
         main: SRType,
         optRequiredType: Option[DataType]): SRType = main match {
@@ -246,17 +342,20 @@ package object optimizations {
       }
     }
 
-    def run(root: SRRoot) = {
-      SRRoot(root.name, root.entries,
-        root.types zip requiredSchema.fields.map(_.dataType) map {
-          case (left, right) => iterate(left, Some(right))
-        })
-    }
+    def run(root: SRRoot, roptions: ROptions) = 
+      if (shouldRun(roptions))
+        SRRoot(root.name, root.entries,
+          root.types zip requiredSchema.fields.map(_.dataType) map {
+            case (left, right) => iterate(left, Some(right))
+          })
+      else
+        root
   }
 
   val basicPasses: Seq[OptimizationPass] = (Nil :+ RemoveEmptyRowPass 
     :+ FlattenOutBasePass 
-    :+ SoftRemoveNullTypePass :+ RemoveEmptyRowPass //\
+    :+ SoftRemoveNullTypePass 
+    :+ HardRemoveNullTypePass
+    :+ RemoveEmptyRowPass //\
   )
-//    :+ FlattenOutBasePass
 }
