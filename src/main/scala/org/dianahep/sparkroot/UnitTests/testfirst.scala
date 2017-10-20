@@ -174,12 +174,28 @@ object testfirst {
     def comparea()= {
       val da = df.select("a")
       val ds = createda()
-      System.out.println(da.count())
-      System.out.println(ds.count())
-      da.show()
-      ds.show()
       if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
         println("a Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdb() : Dataset[Row] = {
+      var ds = Seq[bclass]()
+      var c = 0.0
+      for (i <- 0 to 99){
+        ds = ds :+ bclass(c)
+        c=c+1.0
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def compareb()= {
+      val da = df.select("b")
+      val ds = createdb()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("b Unit Test failed")
         System.exit(0)
       }
     }
@@ -189,6 +205,7 @@ object testfirst {
     comparevofvofDouble
     //compareMuons
     comparea
+    compareb
 
     flag
   }
