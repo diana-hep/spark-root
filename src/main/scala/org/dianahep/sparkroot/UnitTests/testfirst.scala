@@ -3,11 +3,8 @@ package org.dianahep.sparkroot.UnitTests
 
 
 import org.apache.spark.SparkConf
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.dianahep.sparkroot._
-
-import scala.collection.mutable
 
 object testfirst {
 
@@ -511,6 +508,180 @@ object testfirst {
       }
     }
 
+    def createdmulti1() : Dataset[Row] = {
+      var ds = Seq[multi1class]()
+      var arr1 = new Array[Array[Array[Integer]]](2)
+      var arr21 = new Array[Array[Integer]](2)
+      var arr22 = new Array[Array[Integer]](2)
+      var arr3 = new Array[Integer](2)
+      var arr4 = new Array[Integer](2)
+      arr3(0) = 0
+      arr3(1) = 0
+      arr4(0) = 0
+      arr4(1) = 1
+      arr21(0) = arr3
+      arr21(1) = arr3
+      arr22(0) = arr3
+      arr22(1) = arr4
+      arr1(0) = arr21
+      arr1(1) = arr22
+      for (i <- 0 to 99){
+        ds = ds :+ multi1class(arr1)
+      }
+
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparemulti1()={
+      val da = df.select("multi1")
+      val ds = createdmulti1()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("multi1 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdmulti2() : Dataset[Row] = {
+      var ds = Seq[multi2class]()
+      var arr1 = new Array[Array[Array[java.lang.Double]]](2)
+      var arr21 = new Array[Array[java.lang.Double]](2)
+      var arr22 = new Array[Array[java.lang.Double]](2)
+      var arr3 = new Array[java.lang.Double](2)
+      var arr4 = new Array[java.lang.Double](2)
+      arr3(0) = 0.0
+      arr3(1) = 0.0
+      arr4(0) = 0.0
+      arr4(1) = 1.0
+      arr21(0) = arr3
+      arr21(1) = arr3
+      arr22(0) = arr3
+      arr22(1) = arr4
+      arr1(0) = arr21
+      arr1(1) = arr22
+      for (i <- 0 to 99){
+        ds = ds :+ multi2class(arr1)
+      }
+
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparemulti2()={
+      val da = df.select("multi2")
+      val ds = createdmulti2()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("multi2 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdmulti3() : Dataset[Row] = {
+      var ds = Seq[multi3class]()
+      var arr1 = new Array[Array[Array[java.lang.Float]]](2)
+      var arr21 = new Array[Array[java.lang.Float]](2)
+      var arr22 = new Array[Array[java.lang.Float]](2)
+      var arr3 = new Array[java.lang.Float](2)
+      var arr4 = new Array[java.lang.Float](2)
+      val zero : Float = 0
+      val one : Float = 1
+      arr3(0) = zero
+      arr3(1) = zero
+      arr4(0) = zero
+      arr4(1) = one
+      arr21(0) = arr3
+      arr21(1) = arr3
+      arr22(0) = arr3
+      arr22(1) = arr4
+      arr1(0) = arr21
+      arr1(1) = arr22
+      for (i <- 0 to 99){
+        ds = ds :+ multi3class(arr1)
+      }
+
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparemulti3()={
+      val da = df.select("multi3")
+      val ds = createdmulti3()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("multi3 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdmulti4() : Dataset[Row] = {
+      var ds = Seq[multi4class]()
+      var arr1 = new Array[Array[Array[java.lang.Byte]]](2)
+      var arr21 = new Array[Array[java.lang.Byte]](2)
+      var arr22 = new Array[Array[java.lang.Byte]](2)
+      var arr3 = new Array[java.lang.Byte](2)
+      var arr4 = new Array[java.lang.Byte](2)
+      val zero : Byte = 0
+      val one : Byte = 1
+      arr3(0) = zero
+      arr3(1) = zero
+      arr4(0) = zero
+      arr4(1) = one
+      arr21(0) = arr3
+      arr21(1) = arr3
+      arr22(0) = arr3
+      arr22(1) = arr4
+      arr1(0) = arr21
+      arr1(1) = arr22
+      for (i <- 0 to 99){
+        ds = ds :+ multi4class(arr1)
+      }
+
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparemulti4()={
+      val da = df.select("multi4")
+      val ds = createdmulti4()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("multi4 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdmulti5() : Dataset[Row] = {
+      var ds = Seq[multi5class]()
+      var arr1 = new Array[Array[Array[java.lang.Boolean]]](2)
+      var arr21 = new Array[Array[java.lang.Boolean]](2)
+      var arr22 = new Array[Array[java.lang.Boolean]](2)
+      var arr3 = new Array[java.lang.Boolean](2)
+      var arr4 = new Array[java.lang.Boolean](2)
+      arr3(0) = false
+      arr3(1) = false
+      arr4(0) = false
+      arr4(1) = true
+      arr21(0) = arr3
+      arr21(1) = arr3
+      arr22(0) = arr3
+      arr22(1) = arr4
+      arr1(0) = arr21
+      arr1(1) = arr22
+      for (i <- 0 to 99){
+        ds = ds :+ multi5class(arr1)
+      }
+
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparemulti5()={
+      val da = df.select("multi5")
+      val ds = createdmulti5()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("multi5 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
     def createdn() : Dataset[Row] = {
       var ds = Seq[nclass]()
       for (i <- 0 to 99){
@@ -601,6 +772,11 @@ object testfirst {
     comparearr3
     comparearr4
     comparearr5
+    comparemulti1
+    comparemulti2
+    comparemulti3
+    comparemulti4
+    comparemulti5
     comparen
     comparestr
     comparevarr1
