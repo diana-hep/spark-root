@@ -264,6 +264,235 @@ object testfirst {
       }
     }
 
+    def createdarr1() : Dataset[Row] = {
+      var ds = Seq[arr1class]()
+      for (i <- 0 to 99){
+        var arr = new Array[Integer](100)
+        for (j <- 0 to 99){
+          if (j==1){
+            arr(j)=1
+          }
+          else if (j==68){
+            arr(j)= -554688857
+          }
+          else if (j==69){
+            arr(j) = 1375775489
+          }
+          else if (j==70){
+            arr(j)= 1389532384
+          }
+          else if (j==71){
+            arr(j) = 32767
+          }
+          else if (j==72){
+            arr(j) = 37
+          }
+          else if (j==73){
+            arr(j)=0
+          }
+          else if (j==74){
+            arr(j)=1
+          }
+          else if (j==75){
+            arr(j)=0
+          }
+          else if (j==76){
+            arr(j) = 216883304
+          }
+          else if (j==77){
+            arr(j) = 1
+          }
+          else if (j==78){
+            arr(j) = 1642884191
+          }
+          else if (j==79){
+            arr(j) = 32767
+          }
+          else if (j==80){
+            arr(j) = 1389531888
+          }
+          else if (j==81){
+            arr(j) = 32767
+          }
+          else if (j==82){
+            arr(j) = 1642726006
+          }
+          else if (j==83){
+            arr(j) = 32767
+          }
+          else if (j==84){
+            arr(j) = 1389531920
+          }
+          else if (j==85){
+            arr(j) = 32767
+          }
+          else if (j==86){
+            arr(j) = 1389531920
+          }
+          else if (j==87){
+            arr(j) = 32767
+          }
+          else if (j==88){
+            arr(j) = 1
+          }
+          else if (j==89){
+            arr(j) = 0
+          }
+          else if (j==90){
+            arr(j) = 1389531944
+          }
+          else if (j==91){
+            arr(j) = 32767
+          }
+          else if (j==92){
+            arr(j) = 216883200
+          }
+          else if (j==93){
+            arr(j) = 1
+          }
+          else if (j==94){
+            arr(j) = 1642721864
+          }
+          else if (j==95){
+            arr(j) = 32767
+          }
+          else if (j==96){
+            arr(j) = 1389531960
+          }
+          else if (j==97){
+            arr(j) = 32767
+          }
+          else {
+            arr(j)=0
+          }
+        }
+        ds = ds :+ arr1class(arr)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparearr1()= {
+      val da = df.select("arr1")
+      val ds = createdarr1()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("arr1 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdarr2() : Dataset[Row] = {
+      var ds = Seq[arr2class]()
+      for (i <- 0 to 99){
+        var arr = new Array[java.lang.Double](100)
+        for (j <- 0 to 99){
+          if (j==1){
+            arr(j)=1.0
+          }
+          else {
+            arr(j)=0.0
+          }
+        }
+        ds = ds :+ arr2class(arr)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparearr2()= {
+      val da = df.select("arr2")
+      val ds = createdarr2()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("arr2 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdarr3() : Dataset[Row] = {
+      var ds = Seq[arr3class]()
+      val one : Float = 1
+      val zero : Float = 0
+      for (i <- 0 to 99){
+        var arr = new Array[java.lang.Float](100)
+        for (j <- 0 to 99){
+          if (j==1){
+            arr(j)=one
+          }
+          else {
+            arr(j)=zero
+          }
+        }
+        ds = ds :+ arr3class(arr)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparearr3()= {
+      val da = df.select("arr3")
+      val ds = createdarr3()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("arr3 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdarr4() : Dataset[Row] = {
+      var ds = Seq[arr4class]()
+      val one : Byte = 1
+      val zero : Byte = 0
+      for (i <- 0 to 99){
+        var arr = new Array[java.lang.Byte](100)
+        for (j <- 0 to 99){
+          if (j==1){
+            arr(j)=one
+          }
+          else {
+            arr(j)=zero
+          }
+        }
+        ds = ds :+ arr4class(arr)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparearr4()= {
+      val da = df.select("arr4")
+      val ds = createdarr4()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("arr4 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
+    def createdarr5() : Dataset[Row] = {
+      var ds = Seq[arr5class]()
+      for (i <- 0 to 99){
+        var arr = new Array[java.lang.Boolean](100)
+        for (j <- 0 to 99){
+          if (j==1){
+            arr(j)=true
+          }
+          else {
+            arr(j)=false
+          }
+        }
+        ds = ds :+ arr5class(arr)
+      }
+      import spark.implicits._
+      ds.toDF()
+    }
+
+    def comparearr5()= {
+      val da = df.select("arr5")
+      val ds = createdarr5()
+      if (da.except(ds).count() != 0 || ds.except(da).count != 0) {
+        println("arr5 Unit Test failed")
+        System.exit(0)
+      }
+    }
+
     def createstr()={
       var ds = Seq[strclass]()
       for (i <- 0 to 99){
@@ -367,6 +596,11 @@ object testfirst {
     comparec
     compared
     comparef
+    comparearr1
+    comparearr2
+    comparearr3
+    comparearr4
+    comparearr5
     comparen
     comparestr
     comparevarr1
