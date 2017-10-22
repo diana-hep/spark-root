@@ -1,7 +1,5 @@
 package org.dianahep.sparkroot.UnitTests
 
-
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.dianahep.sparkroot._
@@ -32,18 +30,24 @@ object testfirst {
   case class varr1class(varr1: Array[Integer])
   case class varr2class(varr2: Array[java.lang.Double])
 
-  def main() {
+  def main(args: Array[String]) {
 
-    val inputFileName = "/home/pratyush/CERN/spark-root/src/main/resources/test_root4j.root" //Change to point to project directory
-    val conf = new SparkConf().setAppName("Unit Testing test_root4j")
-    val spark = SparkSession.builder()
-      .master("local")
-      .getOrCreate()
+    if (args.size!=0){
+      val inputFileName = args(0)
+      //val inputFileName = "/home/pratyush/CERN/spark-root/src/main/resources/test_root4j.root" //Change to point to project directory
+      val conf = new SparkConf().setAppName("Unit Testing test_root4j")
+      val spark = SparkSession.builder()
+        .master("local")
+        .getOrCreate()
 
-    if (compare(spark,inputFileName)){
-      System.out.println("Everything is working correctly")
+      if (compare(spark,inputFileName)){
+        System.out.println("Everything is working correctly")
+      }
+      spark.stop()
     }
-    spark.stop()
+    else {
+      println("No ROOT file provided")
+    }
 
   }
 
