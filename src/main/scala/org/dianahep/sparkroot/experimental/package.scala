@@ -105,7 +105,7 @@ package experimental {
         spark: SparkSession,
         options: Map[String, String],
         path: Path): Boolean = {
-      true
+      false
     }
 
     /** No writing at this point */
