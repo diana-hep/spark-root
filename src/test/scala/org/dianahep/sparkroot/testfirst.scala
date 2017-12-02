@@ -1,10 +1,9 @@
 package org.dianahep.sparkroot
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{Dataset, Row, SQLContext, SparkSession}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.scalatest._
 import com.github.mrpowers.spark.fast.tests.DataFrameComparer
-import org.apache.spark.sql.types._
 
 trait SparkSessionTestWrapper {
 
@@ -66,24 +65,72 @@ abstract class UnitSpec extends FlatSpec with Matchers with
   OptionValues with Inside with Inspectors
 
 class FirstSpec extends UnitSpec with SparkSessionTestWrapper{
-  "Generated dataframe" should "be the same as created dataframe" in {
-    val test = new testfirst()
-    test.main()
+  val url = getClass.getResource("/test_root4j.root")
+  val inputFileName = url.getPath()
+  val conf = new SparkConf().setAppName("Unit Testing test_root4j")
+  val df = spark.sqlContext.read.root(inputFileName)
+  val test = new testfirst()
+  "Dataframe of type Array(Integer)" should "be the same as created dataframe" in {
+    test.comparemyintvector(df)
+    test.comparearr1(df)
+    test.comparevarr1(df)
+  }
+  "Dataframe of type Array(Array(Integer))" should "be the same as created dataframe" in {
+    test.comparemyvector2(df)
+  }
+  "Dataframe of type Array(Array(Double))" should "be the same as created dataframe" in {
+    test.comparevofvofDouble(df)
+  }
+  "Dataframe of type Integer" should "be the same as created dataframe" in {
+    test.comparea(df)
+    test.comparen(df)
+  }
+  "Dataframe of type Double" should "be the same as created dataframe" in {
+    test.compareb(df)
+  }
+  "Dataframe of type Float" should "be the same as created dataframe" in {
+    test.comparec(df)
+  }
+  "Dataframe of type Byte" should "be the same as created dataframe" in {
+    test.compared(df)
+  }
+  "Dataframe of type Boolean" should "be the same as created dataframe" in {
+    test.comparef(df)
+  }
+  "Dataframe of type Array(Double)" should "be the same as created dataframe" in {
+    test.comparearr2(df)
+    test.comparevarr2(df)
+  }
+  "Dataframe of type Array(Float)" should "be the same as created dataframe" in {
+    test.comparearr3(df)
+  }
+  "Dataframe of type Array(Byte)" should "be the same as created dataframe" in {
+    test.comparearr4(df)
+  }
+  "Dataframe of type Array(Boolean)" should "be the same as created dataframe" in {
+    test.comparearr5(df)
+  }
+  "Dataframe of type String" should "be the same as created dataframe" in {
+    test.comparestr(df)
+  }
+  "Dataframe of type Array(Array(Array(Integer)))" should "be the same as created dataframe" in {
+    test.comparemulti1(df)
+  }
+  "Dataframe of type Array(Array(Array(Double)))" should "be the same as created dataframe" in {
+    test.comparemulti2(df)
+  }
+  "Dataframe of type Array(Array(Array(Float)))" should "be the same as created dataframe" in {
+    test.comparemulti3(df)
+  }
+  "Dataframe of type Array(Array(Array(Byte)))" should "be the same as created dataframe" in {
+    test.comparemulti4(df)
+  }
+  "Dataframe of type Array(Array(Array(Boolean)))" should "be the same as created dataframe" in {
+    test.comparemulti5(df)
   }
 }
 
 class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComparer{
-
-
-  def main() {
-    val url = getClass.getResource("/test_root4j.root")
-    val inputFileName = url.getPath()
-    val conf = new SparkConf().setAppName("Unit Testing test_root4j")
-    val spark = SparkSession.builder()
-      .master("local")
-      .getOrCreate()
-
-    val df = spark.sqlContext.read.root(inputFileName)
 
     def createdmyintvector(): Dataset[Row] = {
       var c = 0;
@@ -105,7 +152,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparemyintvector() = {
+    def comparemyintvector(df : Dataset[Row]) = {
       val da = df.select("myintvector")
       val ds = createdmyintvector()
       assertLargeDataFrameEquality(da,ds)
@@ -141,7 +188,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparemyvector2() = {
+    def comparemyvector2(df : Dataset[Row]) = {
       val da = df.select("myvector2")
       val ds = createdmyvector2()
       assertLargeDataFrameEquality(da,ds)
@@ -156,7 +203,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparevofvofDouble() = {
+    def comparevofvofDouble(df : Dataset[Row]) = {
       val da = df.select("vofvofDouble")
       val ds = createdvofvofDouble()
       assertLargeDataFrameEquality(da,ds)
@@ -194,7 +241,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparea() = {
+    def comparea(df : Dataset[Row]) = {
       val da = df.select("a")
       val ds = createda()
       assertLargeDataFrameEquality(da,ds)
@@ -211,7 +258,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def compareb() = {
+    def compareb(df : Dataset[Row]) = {
       val da = df.select("b")
       val ds = createdb()
       assertLargeDataFrameEquality(da,ds)
@@ -228,7 +275,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparec() = {
+    def comparec(df : Dataset[Row]) = {
       val da = df.select("c")
       val ds = createdc()
       assertLargeDataFrameEquality(da,ds)
@@ -244,7 +291,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def compared() = {
+    def compared(df : Dataset[Row]) = {
       val da = df.select("d")
       val ds = createdd()
       assertLargeDataFrameEquality(da,ds)
@@ -266,7 +313,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparef() = {
+    def comparef(df : Dataset[Row]) = {
       val da = df.select("f")
       val ds = createdf()
       assertLargeDataFrameEquality(da,ds)
@@ -380,7 +427,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparearr1() = {
+    def comparearr1(df : Dataset[Row]) = {
       val da = df.select("arr1")
       val ds = createdarr1()
       assertLargeDataFrameEquality(da,ds)
@@ -404,7 +451,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparearr2() = {
+    def comparearr2(df : Dataset[Row]) = {
       val da = df.select("arr2")
       val ds = createdarr2()
       assertLargeDataFrameEquality(da,ds)
@@ -430,7 +477,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparearr3() = {
+    def comparearr3(df : Dataset[Row]) = {
       val da = df.select("arr3")
       val ds = createdarr3()
       assertLargeDataFrameEquality(da,ds)
@@ -456,7 +503,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparearr4() = {
+    def comparearr4(df : Dataset[Row]) = {
       val da = df.select("arr4")
       val ds = createdarr4()
       assertLargeDataFrameEquality(da,ds)
@@ -480,7 +527,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparearr5() = {
+    def comparearr5(df : Dataset[Row]) = {
       val da = df.select("arr5")
       val ds = createdarr5()
       assertLargeDataFrameEquality(da,ds)
@@ -495,7 +542,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparestr() = {
+    def comparestr(df : Dataset[Row]) = {
       val da = df.select("str")
       val ds = createstr()
       assertLargeDataFrameEquality(da,ds)
@@ -526,7 +573,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparemulti1() = {
+    def comparemulti1(df : Dataset[Row]) = {
       val da = df.select("multi1")
       val ds = createdmulti1()
       assertLargeDataFrameEquality(da,ds)
@@ -557,7 +604,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparemulti2() = {
+    def comparemulti2(df : Dataset[Row]) = {
       val da = df.select("multi2")
       val ds = createdmulti2()
       assertLargeDataFrameEquality(da,ds)
@@ -590,7 +637,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparemulti3() = {
+    def comparemulti3(df : Dataset[Row]) = {
       val da = df.select("multi3")
       val ds = createdmulti3()
       assertLargeDataFrameEquality(da,ds)
@@ -623,7 +670,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparemulti4() = {
+    def comparemulti4(df : Dataset[Row]) = {
       val da = df.select("multi4")
       val ds = createdmulti4()
       assertLargeDataFrameEquality(da,ds)
@@ -654,7 +701,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparemulti5() = {
+    def comparemulti5(df : Dataset[Row]) = {
       val da = df.select("multi5")
       val ds = createdmulti5()
       assertLargeDataFrameEquality(da,ds)
@@ -669,7 +716,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparen() = {
+    def comparen(df : Dataset[Row]) = {
       val da = df.select("n")
       val ds = createdn()
       assertLargeDataFrameEquality(da,ds)
@@ -694,7 +741,7 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparevarr1() = {
+    def comparevarr1(df : Dataset[Row]) = {
       val da = df.select("varr1")
       val ds = createdvarr1()
       assertLargeDataFrameEquality(da,ds)
@@ -721,38 +768,12 @@ class testfirst extends UnitSpec with SparkSessionTestWrapper with DataFrameComp
       ds.toDF()
     }
 
-    def comparevarr2() = {
+    def comparevarr2(df : Dataset[Row]) = {
       val da = df.select("varr2")
       val ds = createdvarr2()
       assertLargeDataFrameEquality(da,ds)
     }
 
-    comparemyintvector
-    comparemyvector2
-    comparevofvofDouble
-    //compareMuons
-    comparea
-    compareb
-    comparec
-    compared
-    comparef
-    comparearr1
-    comparearr2
-    comparearr3
-    comparearr4
-    comparearr5
-    comparemulti1
-    comparemulti2
-    comparemulti3
-    comparemulti4
-    comparemulti5
-    comparen
-    comparestr
-    comparevarr1
-    comparevarr2
-
-    spark.stop()
-  }
 }
 
 
