@@ -1,7 +1,7 @@
 # Spark ROOT
 **Under rapid development :+1:**
 
-**Current Release is on Maven Central: 0.1.13**
+**Current Release is on Maven Central: 0.1.15**
 
 [![DOI](https://zenodo.org/badge/72210073.svg)](https://zenodo.org/badge/latestdoi/72210073)
 
