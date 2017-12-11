@@ -169,19 +169,26 @@ package experimental {
         val treeName = options.get("tree")
         val roptions = ROptions(options)
         var reader: RootFileReader = null;
+        var ttree: TTree = null;
 
         //
         // If there is an issue with the file at TStreamerInfo parsing
         // catch the exception and create an empty iterator
         // NOTE: This will work as long as the file is not the head of the inputFiles list
         //
+        var q = false;
         try {
           reader = new RootFileReader(file.filePath)
+          ttree = findTree(reader, treeName) match {
+            case Some(tree) => tree
+            case None => throw NoTTreeException(treeName)
+          }
         }
         catch {
           case unknown: Throwable => {
             logger.error(s"Exception thrown: " + unknown)
             logger.error(s"Exception in file: ${file.filePath}")
+            q = true; // there was an exception thrown
           }
         }
 
@@ -190,11 +197,7 @@ package experimental {
         // if reader is not null => build the IR/etc.../Row
         // else output an empty Iterator, so that Spark skips it during the xcution
         //
-        if (reader != null) {
-          val ttree = findTree(reader, treeName) match {
-            case Some(tree) => tree
-            case None => throw NoTTreeException(treeName)
-          }
+        if (!q) {
           val iter = new TTreeIterator(ttree, arrangeStreamers(reader),
             requiredSchema, filters.toArray, roptions)
 
