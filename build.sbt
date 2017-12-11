@@ -4,7 +4,7 @@ organization := "org.diana-hep"
 
 licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
 
-version := "0.1.15"
+version := "0.1.16"
 //isSnapshot := true
 
 scalaVersion := "2.11.8"

@@ -168,24 +168,52 @@ package experimental {
       (file: PartitionedFile) => {
         val treeName = options.get("tree")
         val roptions = ROptions(options)
-        val reader = new RootFileReader(file.filePath)
-        val ttree = findTree(reader, treeName) match {
-          case Some(tree) => tree
-          case None => throw NoTTreeException(treeName)
+        var reader: RootFileReader = null;
+
+        //
+        // If there is an issue with the file at TStreamerInfo parsing
+        // catch the exception and create an empty iterator
+        // NOTE: This will work as long as the file is not the head of the inputFiles list
+        //
+        try {
+          reader = new RootFileReader(file.filePath)
         }
-        val iter = new TTreeIterator(ttree, arrangeStreamers(reader),
-          requiredSchema, filters.toArray, roptions)
-
-        new Iterator[InternalRow] {
-          // encoder to convert from Row to InternalRow
-          private val encoder = RowEncoder(requiredSchema)
-
-          // we have next?
-          override def hasNext: Boolean = iter.hasNext
-
-          // get the next element
-          override def next(): InternalRow = encoder.toRow(iter.next())
+        catch {
+          case unknown: Throwable => {
+            logger.error(s"Exception thrown: " + unknown)
+            logger.error(s"Exception in file: ${file.filePath}")
+          }
         }
+
+        //
+        // basically this is the finally clause...
+        // if reader is not null => build the IR/etc.../Row
+        // else output an empty Iterator, so that Spark skips it during the xcution
+        //
+        if (reader != null) {
+          val ttree = findTree(reader, treeName) match {
+            case Some(tree) => tree
+            case None => throw NoTTreeException(treeName)
+          }
+          val iter = new TTreeIterator(ttree, arrangeStreamers(reader),
+            requiredSchema, filters.toArray, roptions)
+
+          new Iterator[InternalRow] {
+            // encoder to convert from Row to InternalRow
+            private val encoder = RowEncoder(requiredSchema)
+
+            // we have next?
+            override def hasNext: Boolean = iter.hasNext
+
+            // get the next element
+            override def next(): InternalRow = encoder.toRow(iter.next())
+          }
+        }
+        else 
+          new Iterator[InternalRow] {
+            override def hasNext: Boolean = false;
+            override def next(): InternalRow = null;
+          }
       }
     }
   }
