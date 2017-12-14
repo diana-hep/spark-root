@@ -1,4 +1,4 @@
-package org.dianahep.sparkroot
+package org.dianahep.sparkroot.experimental
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
@@ -11,7 +11,7 @@ trait SparkSessionTestWrapper {
     SparkSession
       .builder()
       .master("local")
-      .appName("spark test example")
+      .appName("Spark-root Unit Test")
       .getOrCreate()
   }
 }
