@@ -22,3 +22,6 @@ project/plugins/project/
 .settings/
 bin/
 *.sc
+
+#Intellij idea
+.idea/
