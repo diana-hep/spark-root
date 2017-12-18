@@ -43,10 +43,6 @@ libraryDependencies += "org.apache.logging.log4j" % "log4j" % "2.8"
 // scalatest
 libraryDependencies += "org.scalatest" % "scalatest_2.11" % "3.0.1" % "test"
 
-libraryDependencies += "MrPowers" % "spark-fast-tests" % "2.2.0_0.5.0" % "test"
-
-spDependencies += "MrPowers/spark-fast-tests:0.4.0"
-
 pomExtra := (
   <url>https://github.com/diana-hep/spark-root</url>
   <scm>
