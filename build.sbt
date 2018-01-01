@@ -22,6 +22,8 @@ resolvers += Resolver.mavenLocal
 
 libraryDependencies += "org.diana-hep" % "root4j" % "0.1.6"
 
+libraryDependencies += "org.apache.bcel" % "bcel" % "5.2"
+
 // publishing to Maven
 publishMavenStyle := true
 
