@@ -26,6 +26,8 @@ __You are ready to start analyzing__
 - Download a `ROOT` file from `http://opendata.cern.ch/record/391`
 - Start a spark shell: `./bin/spark-shell --packages org.diana-hep:spark-root_2.11:0.1.15`
 ```
+import org.dianahep.sparkroot._
+
 // read in the file
 val df = spark.read.root("file:/Users/vk*.root")
 df: org.apache.spark.sql.DataFrame = [runNumber: int, eventNumber: int ... 44 more fields]
