@@ -138,7 +138,5 @@ root
 
 ## Further examples:
 - Image Conversion Pipeline `https://github.com/vkhristenko/MPJRPipeline/blob/master/ipynb/convert2images_python.ipynb`
-- Data Reduction Example (launched with spark-submit): `https://github.com/vkhristenko/spark-root-applications/blob/master/src/main/scala/org/dianahep/sparkrootapplications/examples/ReductionExampleApp.scala`
-- Employ [Histogrammar](histogrammar.org) to perform complex aggregations (histogramming) `https://github.com/vkhristenko/spark-root-applications/blob/master/src/main/scala/org/dianahep/sparkrootapplications/examples/HiggsExampleApp.scala`
 - Feature Engineering `https://github.com/vkhristenko/MPJRPipeline/blob/master/ipynb/preprocessing_python_noudfs.ipynb`
 - Public CMS Open Data Example `https://github.com/diana-hep/spark-root/blob/master/ipynb/publicCMSMuonia_exampleAnalysis_wROOT.ipynb` 
