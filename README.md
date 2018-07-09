@@ -3,6 +3,8 @@
 
 **Current Release is on Maven Central: 0.1.15 (awaiting 0.1.16)**
 
+**ROOT 6.12 (and beyond) updates are not yet integrated**
+
 [![DOI](https://zenodo.org/badge/72210073.svg)](https://zenodo.org/badge/latestdoi/72210073)
 
 An [Apache Spark's](http://spark.apache.org/) Data Source for [ROOT](https://root.cern.ch/) File Format. Employ `Spark's Datasets` for processing of `ROOT TTrees`.
