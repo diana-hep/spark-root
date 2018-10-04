@@ -4,7 +4,7 @@ organization := "org.diana-hep"
 
 licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
 
-version := "0.1.16"
+version := "0.1.17"
 //isSnapshot := true
 
 scalaVersion := "2.11.8"
@@ -14,7 +14,7 @@ crossScalaVersions := Seq("2.10.6", "2.11.8")
 // spark
 spIgnoreProvided := true
 
-sparkVersion := "2.0.0"
+sparkVersion := "2.3.0"
 
 sparkComponents := Seq("sql")
 

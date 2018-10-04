@@ -12,7 +12,7 @@ import org.apache.spark.sql.sources.PrunedFilteredScan
 import org.apache.spark.sql.sources.RelationProvider
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructType, DataType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 
@@ -149,6 +149,9 @@ package experimental {
       val sparkSchema = buildSparkSchema(optimizedIR)
       Some(sparkSchema)
     }
+
+    /** a new member function to validate the types */
+    def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = true
 
     /** reading function */
     override def buildReaderWithPartitionValues(
