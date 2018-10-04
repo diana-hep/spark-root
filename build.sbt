@@ -34,6 +34,8 @@ publishTo := {
     Some("releases"  at nexus + "service/local/staging/deploy/maven2")
 }
 
+//credentials += Credentials(Path.userHome / ".sbt" / ".sonaytype_credentials")
+
 // not to publish your test artifacts
 publishArtifact in Test := false
 
