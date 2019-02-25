@@ -1,5 +1,5 @@
 # spark-root
-**Under rapid development :+1:**
+**No longer actively developed**
 
 **Current Release is on Maven Central: 0.1.15 (awaiting 0.1.16)**
 
