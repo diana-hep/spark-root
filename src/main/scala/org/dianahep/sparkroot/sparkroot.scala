@@ -93,7 +93,7 @@ package object sparkroot {
     {
       //logger.info("Building the Abstract Schema Tree...")
       logger.info(s"Building the Abstract Schema Tree... for treeName=${optTreeName}")
-      val reader = new RootFileReader(inputPathFiles head)
+      val reader = new RootFileReader(inputPathFiles head, sqlContext.sparkContext.hadoopConfiguration)
       findTree(reader.getTopDir, optTreeName) match {
         case Some(tree) => buildATT(tree, arrangeStreamers(reader), null)
         case None => throw NoTTreeException(optTreeName)
@@ -121,7 +121,7 @@ package object sparkroot {
       val r = sqlContext.sparkContext.parallelize(inputPathFiles, inputPathFiles.size).
         flatMap({pathName =>
           logger.info(s"Opening file $pathName")
-          val reader = new RootFileReader(pathName)
+          val reader = new RootFileReader(pathName, sqlContext.sparkContext.hadoopConfiguration)
           findTree(reader, localOptTreeName) match {
             case Some(tree) => new RootTreeIterator(tree, arrangeStreamers(reader), 
               requiredColumns, filters)

@@ -20,6 +20,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.hadoop.fs.{Path, FileSystem, PathFilter, FileStatus}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.Job
+import java.io.{ObjectInputStream, ObjectOutputStream}
 
 // sparkroot or root4j
 import org.dianahep.root4j.core.RootInput
@@ -96,6 +97,18 @@ package experimental {
     def hasNext = containsNext(tt)
     def next() = readSparkRow(tt)
   }
+  /** Serializator class for hadoop configuration. Copy of private package org.apache.spark.util.SerializableConfiguration **/
+  class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
+    private def writeObject(out: ObjectOutputStream) {
+      out.defaultWriteObject()
+      value.write(out)
+    }
+
+    private def readObject(in: ObjectInputStream) {
+      value = new Configuration(false)
+      value.readFields(in)
+    }
+  }
 
   /** Data Source a la parquet */
   class DefaultSource extends FileFormat {
@@ -129,7 +142,7 @@ package experimental {
       files.map(_.getPath.toString).foreach({x: String => logger.info(s"pathname = $x")})
       
       // open the ROOT file
-      val reader = new RootFileReader(files.head.getPath.toString)
+      val reader = new RootFileReader(files.head.getPath.toString, sparkSession.sparkContext.hadoopConfiguration)
 
       // get the TTree and generate the Typed Tree - intermediate representation
       val optTree = findTree(reader.getTopDir, treeName)
@@ -151,7 +164,7 @@ package experimental {
     }
 
     /** a new member function to validate the types */
-    def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = true
+    override def supportDataType(dataType: DataType, isReadPath: Boolean): Boolean = true
 
     /** reading function */
     override def buildReaderWithPartitionValues(
@@ -167,8 +180,12 @@ package experimental {
       logger.info(s"partitionSchema: ${partitionSchema.fields.map(_.name).toSeq}")
       logger.info(s"requiredSchema: \n${requiredSchema.treeString}")
       logger.info(s"$options")
+
+      val broadcastedConf = sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
       
       (file: PartitionedFile) => {
+        val conf = broadcastedConf.value.value
+
         val treeName = options.get("tree")
         val roptions = ROptions(options)
         var reader: RootFileReader = null;
@@ -181,7 +198,7 @@ package experimental {
         //
         var q = false;
         try {
-          reader = new RootFileReader(file.filePath)
+          reader = new RootFileReader(file.filePath, conf)
           ttree = findTree(reader, treeName) match {
             case Some(tree) => tree
             case None => throw NoTTreeException(treeName)
